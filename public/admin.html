@@ -240,11 +240,10 @@
     const leaderEl = document.getElementById("leader");
     if (counts.length) {
       const max = Math.max(...counts);
-      const leaders = counts.map((v,i)=>({v,i})).filter(x=>x.v===max).map(x=>options[x.i]);
+      const leader = (counts.map((v,i)=>({v,i})).filter(x=>x.v===max).map(x=>options[x.i]))[0];
       if (max > 0) {
         leaderEl.style.display = "block";
-        leaderEl.textContent = leaders.length > 1 ? `Tied lead: ${leaders.join(" & ")} (${max})`
-                                                  : `Leading: ${leaders[0]} (${max})`;
+        leaderEl.textContent = `Leading: ${leader} (${max})`;
       } else {
         leaderEl.style.display = "block";
         leaderEl.textContent = "No votes yet";
