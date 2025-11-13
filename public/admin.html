@@ -1,0 +1,273 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Admin</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  body { font-family: system-ui, Arial; margin: 20px; }
+  button, select, input { font-size: 16px; padding: 8px 12px; }
+  .row { margin: 14px 0; display:flex; align-items:center; gap:10px; flex-wrap: wrap; }
+  .counts { display:flex; gap:14px; align-items:center; flex-wrap: wrap; }
+  .badge { display:inline-block; min-width:2ch; text-align:center; padding:4px 8px; border-radius:8px; background:#eee; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:#ddd; margin-left:8px; font-size:90%; }
+  #adminTimer { background:#1e1e1e; border:1px solid #333; border-radius:10px; }
+  fieldset { border:1px solid #aaa; border-radius:10px; padding:10px 12px; }
+  legend { padding: 0 6px; opacity:.85; }
+
+  #leader {
+    font-weight: 800;
+    padding: 6px 10px;
+    border-radius: 10px;
+    background: #ffefc0;
+    color: #3a2a00;
+    display: block;
+    margin-top: 8px;
+  }
+
+  /* Connection indicator */
+  #connDot {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: middle;
+    background-color: red;
+  }
+
+  /* Question / Flavor blocks */
+  #sceneMeta {
+    margin-top: 6px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: #222;
+    color: #eee;
+    display: none;
+  }
+  #sceneMeta .label {
+    opacity: .85; font-weight: 600; margin-right: 6px;
+  }
+</style>
+
+<h1>Admin</h1>
+
+<!-- Scene Controls -->
+<fieldset>
+  <legend>Scene Controls</legend>
+  <div class="row">
+    <label for="sceneSelect">Server Scene:</label>
+    <select id="sceneSelect"></select>
+    <button id="apply">Select Scene</button>
+    <button id="next">Next Scene</button>
+    <button id="reset">Reset Counts</button>
+    <span id="sceneType" class="pill" style="display:none;"></span>
+  </div>
+
+  <!-- Auto-start timer on scene change -->
+  <div class="row">
+    <label>
+      <input type="checkbox" id="autoStartChk" />
+      Auto-start timer on scene change
+    </label>
+  </div>
+
+  <div class="row" style="display:block;">
+    <strong>Current server scene:</strong> <span id="current">Waiting</span>
+  </div>
+
+  <!-- NEW: scene meta display -->
+  <div id="sceneMeta">
+    <div id="metaQuestion" style="display:none;"><span class="label">Question:</span><span id="qText"></span></div>
+    <div id="metaFlavor"   style="display:none;"><span class="label">Flavor:</span><span id="fText"></span></div>
+  </div>
+</fieldset>
+
+<!-- Timer Controls -->
+<fieldset style="margin-top:14px;">
+  <legend>Round Timer</legend>
+  <div class="row">
+    <label class="pill">Duration (seconds)</label>
+    <input id="seconds" type="number" min="1" step="1" value="30" style="width:90px;" />
+    <button id="start">Start</button>
+    <button id="stop">Stop</button>
+    <canvas id="adminTimer" width="260" height="70"></canvas>
+  </div>
+  <div class="row" id="timerHint" style="opacity:.75;">Timer only runs on voting scenes.</div>
+</fieldset>
+
+<!-- Vote totals -->
+<fieldset style="margin-top:14px;">
+  <legend>Vote Totals</legend>
+  <div id="votePanel" class="row" style="display:none; align-items: flex-start;">
+    <div id="counts" class="counts"></div>
+    <span id="gating" class="pill" style="display:none;"></span>
+  </div>
+  <div id="leader" style="display:none;"></div>
+</fieldset>
+
+<p><span id="connDot"></span><span id="status" style="opacity:.85;">Connecting…</span></p>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const sel = document.getElementById("sceneSelect");
+  const applyBtn = document.getElementById("apply");
+  const nextBtn  = document.getElementById("next");
+  const resetBtn = document.getElementById("reset");
+  const current  = document.getElementById("current");
+  const statusEl = document.getElementById("status");
+  const connDot  = document.getElementById("connDot");
+  const countsDiv = document.getElementById("counts");
+  const votePanel = document.getElementById("votePanel");
+  const gating = document.getElementById("gating");
+  const sceneTypePill = document.getElementById("sceneType");
+  const autoStartChk = document.getElementById("autoStartChk");
+
+  const secondsInput = document.getElementById("seconds");
+  const startBtn = document.getElementById("start");
+  const stopBtn  = document.getElementById("stop");
+
+  const sceneMeta = document.getElementById("sceneMeta");
+  const metaQuestion = document.getElementById("metaQuestion");
+  const metaFlavor = document.getElementById("metaFlavor");
+  const qText = document.getElementById("qText");
+  const fText = document.getElementById("fText");
+
+  // Timer canvas
+  const timerCanvas = document.getElementById("adminTimer");
+  const tctx = timerCanvas.getContext("2d");
+  let aRemaining = 0, aDuration = 30000;
+
+  function drawAdminTimer() {
+    const w = timerCanvas.width, h = timerCanvas.height;
+    tctx.clearRect(0,0,w,h);
+    tctx.fillStyle = "#1e1e1e"; tctx.fillRect(0,0,w,h);
+
+    const p = Math.max(0, Math.min(1, aDuration ? aRemaining / aDuration : 0));
+    const barW = Math.round((w-20) * p);
+    tctx.fillStyle = "#333"; tctx.fillRect(10, h-24, w-20, 14);
+    tctx.fillStyle = p > 0 ? "#2b79ff" : "#888";
+    tctx.fillRect(10, h-24, barW, 14);
+
+    tctx.fillStyle = "#fff";
+    tctx.font = "700 18px system-ui, Arial";
+    tctx.textAlign = "center"; tctx.textBaseline = "middle";
+    const s = Math.max(0, Math.ceil(aRemaining/1000));
+    tctx.fillText(`⏱ ${s}s`, w/2, 22);
+  }
+  drawAdminTimer();
+
+  const socket = io();
+  socket.emit("identify", { role: "admin" });
+
+  socket.on("connect", () => { connDot.style.backgroundColor = "limegreen"; statusEl.textContent = "Connected: " + socket.id; });
+  socket.on("disconnect", () => { connDot.style.backgroundColor = "red"; statusEl.textContent = "Disconnected… (auto-retrying)"; });
+
+  // Scene list with meta (index-based)
+  let sceneList = []; // [{index,name,type,question,flavor}, ...]
+  socket.on("scenes", ({ scenes }) => {
+    sceneList = scenes.slice();
+    sel.innerHTML = "";
+
+    const totalByName = {};
+    for (const s of sceneList) totalByName[s.name] = (totalByName[s.name] || 0) + 1;
+
+    const seenByName = {};
+    for (const s of sceneList) {
+      seenByName[s.name] = (seenByName[s.name] || 0) + 1;
+      const dup = totalByName[s.name] > 1;
+      const label = dup ? `${s.name} #${seenByName[s.name]}` : s.name;
+
+      const opt = document.createElement("option");
+      opt.value = String(s.index);
+      opt.textContent = label + (s.type === 'hold' ? ' (hold)' : ' (vote)');
+      sel.appendChild(opt);
+    }
+  });
+
+  function setSceneTypePill(name) {
+    const voting = (name !== "Waiting");
+    sceneTypePill.style.display = "inline-block";
+    sceneTypePill.textContent = voting ? "Voting Scene" : "Holding Scene";
+  }
+  function isVoting(name){ return name !== "Waiting"; }
+
+  // Show meta (question/flavor) by current index
+  function showSceneMeta(index, name){
+    const entry = sceneList.find(s => s.index === index);
+    if (!entry) { sceneMeta.style.display = "none"; return; }
+
+    const q = entry.question || null;
+    const f = entry.flavor || null;
+
+    metaQuestion.style.display = q ? "block" : "none";
+    metaFlavor.style.display = f ? "block" : "none";
+    qText.textContent = q || "";
+    fText.textContent = f || "";
+
+    if (q || f) sceneMeta.style.display = "block";
+    else sceneMeta.style.display = "none";
+  }
+
+  // Auto-start flag
+  let pendingAutoStart = false;
+  socket.on("state", ({ state, index }) => {
+    current.textContent = state;
+    if (Number.isInteger(index)) sel.value = String(index);
+    setSceneTypePill(state);
+    votePanel.style.display = (state === "Waiting") ? "none" : "flex";
+    showSceneMeta(index, state);
+
+    if (pendingAutoStart && isVoting(state)) {
+      const secs = Math.max(1, Number(secondsInput.value) || 30);
+      socket.emit("startTimer", { seconds: secs });
+    }
+    pendingAutoStart = false;
+
+    if (state === "Waiting") {
+      document.getElementById("leader").style.display = "none";
+    }
+  });
+
+  // Vote totals + winning indicator
+  socket.on("sceneData", ({ name, options, counts, allowedClasses }) => {
+    countsDiv.innerHTML = "";
+    for (let i=0; i<options.length; i++) {
+      const span = document.createElement("span");
+      span.innerHTML = `${options[i]}: <span class="badge">${counts[i]}</span>`;
+      countsDiv.appendChild(span);
+    }
+    gating.style.display = "inline-block";
+    gating.textContent = `Allowed classes: ${allowedClasses.join(", ")}`;
+
+    const leaderEl = document.getElementById("leader");
+    if (counts.length) {
+      const max = Math.max(...counts);
+      const leaders = counts.map((v,i)=>({v,i})).filter(x=>x.v===max).map(x=>options[x.i]);
+      if (max > 0) {
+        leaderEl.style.display = "block";
+        leaderEl.textContent = leaders.length > 1 ? `Tied lead: ${leaders.join(" & ")} (${max})`
+                                                  : `Leading: ${leaders[0]} (${max})`;
+      } else {
+        leaderEl.style.display = "block";
+        leaderEl.textContent = "No votes yet";
+      }
+    } else {
+      leaderEl.style.display = "none";
+    }
+  });
+
+  socket.on("timer", ({ remainingMs, durationMs }) => { aRemaining = remainingMs; aDuration = durationMs; drawAdminTimer(); });
+
+  // Controls
+  applyBtn.addEventListener("click", () => {
+    const idx = Number(sel.value);
+    if (!Number.isInteger(idx)) return;
+    pendingAutoStart = autoStartChk.checked;
+    socket.emit("setStateIndex", idx);
+  });
+  nextBtn.addEventListener("click", () => { pendingAutoStart = autoStartChk.checked; socket.emit("nextScene"); });
+  resetBtn.addEventListener("click", () => socket.emit("resetScene"));
+  startBtn.addEventListener("click", () => {
+    const secs = Math.max(1, Number(secondsInput.value) || 30);
+    socket.emit("startTimer", { seconds: secs });
+  });
+  stopBtn.addEventListener("click", () => socket.emit("stopTimer"));
+</script>

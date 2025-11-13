@@ -1,0 +1,464 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Client</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  :root { color-scheme: light dark; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display:flex; align-items:center; justify-content:center;
+    background:#111; color:#eee; font-family:system-ui, Arial;
+    padding: env(safe-area-inset-top) 8px env(safe-area-inset-bottom);
+  }
+  #wrap { width: 100%; max-width: 900px; text-align: center; position: relative; }
+  canvas { background:#1e1e1e; border:1px solid #333; border-radius:12px; touch-action: manipulation; }
+
+  /* Connection indicator */
+  #connStatus {
+    position: absolute;
+    top: 8px; right: 12px;
+    display: flex; align-items: center; gap: 6px;
+    font-size: 14px; opacity: .9;
+    user-select: none;
+  }
+  #connDot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background-color: red;
+    box-shadow: 0 0 4px rgba(0,0,0,.5);
+  }
+  @keyframes pulseRed {
+    0%   { background-color: #900; transform: scale(1);   box-shadow: 0 0 6px #f00; }
+    50%  { background-color: #f00; transform: scale(1.3); box-shadow: 0 0 10px #f55; }
+    100% { background-color: #900; transform: scale(1);   box-shadow: 0 0 6px #f00; }
+  }
+  .pulse { animation: pulseRed 1.2s infinite ease-in-out; }
+
+  .hint { opacity:.85; font-size:14px; margin-top:8px; }
+</style>
+
+<div id="wrap">
+  <div id="connStatus">
+    <div id="connDot"></div><span id="connText">Connecting…</span>
+  </div>
+  <h1 style="margin:0 0 8px;">Client</h1>
+  <p>Server scene: <strong id="serverScene">Waiting</strong></p>
+  <p>Your class: <strong id="classEl">not selected</strong></p>
+  <canvas id="canvas" width="600" height="400"></canvas>
+  <p id="help" class="hint">Enter your name, then choose a class to join.</p>
+  <p id="status" style="opacity:.7;margin-top:10px;">&nbsp;</p>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const connDot  = document.getElementById("connDot");
+  const connText = document.getElementById("connText");
+  const statusEl = document.getElementById("status");
+  const serverSceneEl = document.getElementById("serverScene");
+  const classLabel = document.getElementById("classEl");
+  const help = document.getElementById("help");
+
+  var internalCtr = {obedience:0,selfishness:0,sacrifice:0};
+
+  const socket = io();
+  socket.emit("identify", { role: "client" });
+
+  // Connection indicator behavior
+  socket.on("connect", () => {
+    connDot.style.backgroundColor = "limegreen";
+    connDot.classList.remove("pulse");
+    connText.textContent = "Connected";
+    statusEl.textContent = "Connected: " + socket.id;
+  });
+  socket.on("disconnect", () => {
+    connDot.style.backgroundColor = "#900";
+    connDot.classList.add("pulse");
+    connText.textContent = "Disconnected — retrying…";
+    statusEl.textContent = "Disconnected… (auto-retrying)";
+  });
+  socket.on("reconnect", (attempt) => {
+    connDot.style.backgroundColor = "limegreen";
+    connDot.classList.remove("pulse");
+    connText.textContent = "Reconnected (attempt " + attempt + ")";
+    setTimeout(() => connText.textContent = "Connected", 2000);
+  });
+
+  // Client local pipeline: Title -> ClassSelect -> Waiting
+  let localStage = "Title";
+  let displayName = "";
+  let userClass = null;
+
+  // Scenes + meta from server
+  let sceneList = [];   // [{index,name,type,question,flavor}, ...]
+  let serverScene = "Waiting";
+  let serverIndex = 0;
+
+  // Voting state
+  let hasVoted = false;
+  let sceneOptions = [];
+  let allowedClasses = [];
+
+  // Timer
+  let timerRemainingMs = 0;
+  let timerDurationMs  = 30_000;
+
+  // Receive scenes (with meta)
+  socket.on("scenes", ({ scenes }) => {
+    sceneList = scenes.slice();
+  });
+
+  // Title name set
+  socket.on("nameSet", ({ ok, name }) => { if (ok) { displayName = name || ""; render(); } });
+
+  // Class select
+  socket.on("classSet", ({ classId }) => {
+    userClass = classId; classLabel.textContent = String(userClass);
+    localStage = "Waiting";
+    help.textContent = "Waiting for the show to start…";
+    socket.emit("joinAfterClass");
+    render();
+  });
+
+  // State updates (include index so we can read flavor/question)
+  socket.on("state", ({ state, index }) => {
+    serverScene = state; 
+    serverIndex = Number.isInteger(index) ? index : serverIndex;
+    serverSceneEl.textContent = state;
+
+    if(state==="EndScene") {
+      localStage = "EndScene";
+    } else if (localStage==="EndScene") {
+      localsTage = "EndScene";
+    }
+    if (localStage === "Waiting" && isVoting(serverScene)) hasVoted = false;
+
+    render();
+  });
+
+  socket.on("sceneData", ({ name, options, counts, allowedClasses: allowed }) => {
+    if (name !== serverScene) return;
+    sceneOptions = options.slice();
+    allowedClasses = allowed.slice();
+    render();
+  });
+
+  socket.on("sceneReset", ({ scene }) => {
+    if (scene === serverScene) { hasVoted = false; render(); }
+  });
+
+  socket.on("timer", ({ remainingMs, durationMs }) => {
+    timerRemainingMs = remainingMs; timerDurationMs = durationMs; render();
+  });
+
+  socket.on("notEligible", ({ scene, required }) => {
+    if (scene === serverScene) {
+      help.textContent = `Not eligible. Allowed classes: ${required.join(", ")}`;
+      setTimeout(() => { if (help.textContent.startsWith("Not eligible")) help.textContent = ""; }, 2500);
+    }
+  });
+
+  function isVoting(name){ return name !== "Waiting"; }
+
+  // Canvas + layout
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  const ASPECT = 3/2;
+
+  function getViewportSize(){
+    const vv = window.visualViewport;
+    return { vw: vv ? vv.width : innerWidth, vh: vv ? vv.height : innerHeight };
+  }
+  function resizeCanvasToViewport(){
+    const { vw, vh } = getViewportSize();
+    const maxW = Math.min(vw * 0.98, 900);
+    const maxH = Math.min(vh * 0.92, 900);
+    let cssW = maxW, cssH = cssW / ASPECT;
+    if (cssH > maxH) { cssH = maxH; cssW = cssH * ASPECT; }
+    canvas.style.width = cssW + "px";
+    canvas.style.height = cssH + "px";
+    fitForDPR(); render();
+  }
+  function fitForDPR(){
+    const dpr = devicePixelRatio || 1;
+    const cssW = canvas.clientWidth || canvas.width;
+    const cssH = canvas.clientHeight || canvas.height;
+    canvas.width  = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  let rafReq = null;
+  function scheduleResize(){
+    if (rafReq) return;
+    rafReq = requestAnimationFrame(() => { rafReq = null; resizeCanvasToViewport(); });
+  }
+  addEventListener("resize", scheduleResize, { passive:true });
+  if (visualViewport){
+    visualViewport.addEventListener("resize", scheduleResize, { passive:true });
+    visualViewport.addEventListener("scroll", scheduleResize, { passive:true });
+  }
+
+  // Drawing helpers
+  function clear(){
+    const w = canvas.clientWidth || 600, h = canvas.clientHeight || 400;
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle = "#1e1e1e"; ctx.fillRect(0,0,w,h);
+  }
+  function drawButton(x,y,w,h,label,disabled){
+    const r=12;
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+    ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+    ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+    ctx.closePath();
+    ctx.fillStyle = disabled ? "#666" : "#1565c0";
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.font = "600 18px system-ui, Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, x + w/2, y + h/2);
+  }
+  function drawHeader(text, y, size=22){
+    const w = canvas.clientWidth || 600;
+    ctx.fillStyle = "#fff";
+    ctx.font = `700 ${size}px system-ui, Arial`;
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    ctx.fillText(text, w/2, y);
+  }
+  function drawBody(text, y, size=16){
+    const w = canvas.clientWidth || 600;
+    ctx.fillStyle = "#ddd";
+    ctx.font = `${size}px system-ui, Arial`;
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    wrapText(text, w/2, y, Math.min(w*0.9, 560), size+6);
+  }
+  function wrapText(text, x, y, maxW, lineH){
+    if (!text) return;
+    const words = String(text).split(/\s+/);
+    let line = "", yy = y;
+    for (let n=0; n<words.length; n++){
+      const test = line ? (line + " " + words[n]) : words[n];
+      const w = ctx.measureText(test).width;
+      if (w > maxW && n > 0){
+        ctx.fillText(line, x, yy);
+        line = words[n]; yy += lineH;
+      } else {
+        line = test;
+      }
+    }
+    ctx.fillText(line, x, yy);
+  }
+  function fmtSeconds(ms){ const s = Math.ceil(ms / 1000); return Math.max(0, s).toString(); }
+  function drawTimerOverlay(){
+    if (!isVoting(serverScene)) return;
+    const w = canvas.clientWidth || 600;
+    const pad = 16;
+    const label = `⏱ ${fmtSeconds(timerRemainingMs)}s`;
+    ctx.font = "700 18px system-ui, Arial";
+    const tw = ctx.measureText(label).width + 16;
+    const th = 28;
+    const x = w - pad - tw, y = pad, r = 10;
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.lineTo(x+tw-r,y); ctx.quadraticCurveTo(x+tw,y,x+tw,y+r);
+    ctx.lineTo(x+tw,y+th-r); ctx.quadraticCurveTo(x+tw,y+th,x+tw-r,y+th);
+    ctx.lineTo(x+r,y+th); ctx.quadraticCurveTo(x,y+th,x,y+th-r);
+    ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.textAlign = "right"; ctx.textBaseline = "top";
+    ctx.fillText(label, w - pad - 8, pad + 5);
+  }
+
+  let buttonRects = [];
+
+  function currentMeta(){
+    return sceneList.find(s => s.index === serverIndex) || null;
+  }
+
+  function layoutTitle(){
+    buttonRects = [];
+    const w = canvas.clientWidth || 600;
+    const h = canvas.clientHeight || 400;
+
+    drawHeader("Welcome!", 16, 26);
+    drawBody(displayName ? `Name: ${displayName}` : "Tap 'Enter Name' to set your name", 52);
+
+    const btnW = Math.min(w * 0.7, 420);
+    const btnH = 56; const gap = 16;
+    const totalH = btnH*2 + gap;
+    const x = (w - btnW)/2;
+    const y0 = (h - totalH)/2;
+
+    buttonRects.push({
+      x, y: y0, w: btnW, h: btnH, label: "Enter Name",
+      disabled: false,
+      onClick: () => {
+        const val = prompt("Enter your name (max 40 chars):", displayName || "");
+        if (val !== null) socket.emit("setName", { name: val });
+      }
+    });
+    buttonRects.push({
+      x, y: y0 + btnH + gap, w: btnW, h: btnH, label: "Continue to Class Select",
+      disabled: false,
+      onClick: () => { localStage = "ClassSelect"; help.textContent = "Choose your class to join."; render(); }
+    });
+  }
+
+  function layoutClassSelect(){
+    buttonRects = [];
+    const w = canvas.clientWidth || 600;
+    const h = canvas.clientHeight || 400;
+
+    drawHeader("Class Select", 16, 24);
+
+    const labels = ["Class 1","Class 2","Class 3","Class 4","Class 5"];
+    const cols = (h < 420 || w > 560) ? 2 : 1;
+    const btnW = cols === 2 ? Math.min(w*0.42, 360) : Math.min(w*0.8, 520);
+    const btnH = Math.max(44, Math.min(64, (h-140) / Math.ceil(labels.length/cols) - 12));
+    const gapX = 16, gapY = 12;
+
+    const totalRows = Math.ceil(labels.length / cols);
+    const gridW = cols*btnW + (cols-1)*gapX;
+    const gridH = totalRows*btnH + (totalRows-1)*gapY;
+    const x0 = (w - gridW)/2;
+    const y0 = Math.max(70, (h - gridH)/2);
+
+    labels.forEach((lab, i) => {
+      const c = cols === 2 ? (i % 2) : 0;
+      const r = cols === 2 ? Math.floor(i/2) : i;
+      const x = x0 + c*(btnW + gapX);
+      const y = y0 + r*(btnH + gapY);
+      buttonRects.push({
+        x, y, w: btnW, h: btnH, label: lab, disabled: false,
+        onClick: () => socket.emit("setClass", { classId: i+1 })
+      });
+    });
+  }
+
+  function layoutWaiting(){
+    buttonRects = [];
+    const w = canvas.clientWidth || 600;
+    const h = canvas.clientHeight || 400;
+
+    // Flavor per Waiting index
+    const entry = currentMeta();
+    const flavor = entry && entry.flavor ? entry.flavor : "Please wait…";
+
+    drawHeader("Please wait…", Math.max(16, h*0.2), 26);
+    drawBody(flavor, Math.max(60, h*0.2 + 34));
+    help.textContent = "Waiting for the host to start.";
+  }
+
+  function layoutEndScene() {
+    //Calculate obedience heuristic
+    var obedient = (internalCtr.obedience===1)?true:false;
+    var colorHex = obedient?"#0ced00":"#ed0000";
+
+    var obedientStr = "Thank you for your unwavering trust in the Palantell system. Please wait for our patients to exit before leaving. Thank you for your cooperation!";
+    var disobedientStr = "Please step forward, do not resist, you have been chosen for re-education! You will now be kindly escorted for terminal processing, thank you for your cooperation!";
+
+    var bodyText = obedient?obedientStr:disobedientStr;
+
+    buttonRects = [];
+
+    const w = canvas.clientWidth || 600;
+    const h = canvas.clientHeight || 400;
+
+    ctx.fillStyle = colorHex;
+    ctx.fillRect(0, 0, w, h);
+
+    drawHeader("Algorithmic Evaluation", Math.max(16, h*0.2), 26);
+    drawBody(bodyText, Math.max(60, h*0.2 + 34));
+    help.textContent = "We deeply appreciate your trust in allowing Palantell to lovingly determine who ascends to our higher standard of living and who remains for processing—all for the sake of nurturing divine harmony.";
+  }
+
+  function layoutVoting(){
+    buttonRects = [];
+    const w = canvas.clientWidth || 600;
+    const h = canvas.clientHeight || 400;
+
+    const eligible = userClass && allowedClasses.includes(userClass);
+    const timeUp   = timerRemainingMs <= 0;
+
+    // Question from scene meta
+    const entry = currentMeta();
+    const question = entry && entry.question ? entry.question : "Make your choice";
+
+    drawHeader(question, 16, 22);
+
+    const btnW = Math.min(w * 0.8, 520);
+    const btnH = Math.max(44, Math.min(64, (h-160)/sceneOptions.length - 12));
+    const gap = 12;
+    const totalH = sceneOptions.length*btnH + (sceneOptions.length-1)*gap;
+    const x = (w - btnW)/2;
+    const startY = Math.max(90, (h - totalH)/2);
+
+    sceneOptions.forEach((lab, i) => {
+      buttonRects.push({
+        x, y: startY + i*(btnH+gap), w: btnW, h: btnH, label: lab,
+        disabled: hasVoted || !eligible || timeUp,
+        onClick: () => {
+          if (hasVoted || !eligible || timeUp) return;
+          hasVoted = true; 
+          switch(i) {
+            case 0:
+              internalCtr.obedience++;
+              break;
+            case 1:
+              internalCtr.selfishness++;
+              break;
+            case 2:
+              internalCtr.sacrifice++;
+              break;
+            default:
+          }
+          render();
+          socket.emit("vote", { optionIndex: i });
+        }
+      });
+    });
+
+    if (!userClass)       help.textContent = "Select a class first in ClassSelect.";
+    else if (!eligible)   help.textContent = `Your class (${userClass}) is not eligible.`;
+    else if (timeUp)      help.textContent = "Time's up — waiting for next round.";
+    else if (hasVoted)    help.textContent = "Vote submitted — buttons locked.";
+    else                  help.textContent = "Tap an option to vote.";
+  }
+
+  function render(){
+    clear();
+    if (localStage === "Title") {
+      layoutTitle();
+    } else if (localStage === "ClassSelect") {
+      layoutClassSelect();
+    } else if (localStage === "Waiting") {
+      if (isVoting(serverScene) && sceneOptions.length) {
+        layoutVoting(); drawTimerOverlay();
+      } else {
+        layoutWaiting();
+      }
+    } else if (localStage === "EndScene") {
+      layoutEndScene();
+    }
+    for (const b of buttonRects) drawButton(b.x,b.y,b.w,b.h,b.label,b.disabled);
+  }
+
+  canvas.addEventListener("pointerup", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    for (const b of buttonRects) {
+      if (px >= b.x && px <= b.x+b.w && py >= b.y && py <= b.y+b.h) {
+        if (!b.disabled && typeof b.onClick === "function") b.onClick();
+        break;
+      }
+    }
+  }, { passive:true });
+
+  render();
+  resizeCanvasToViewport();
+</script>
