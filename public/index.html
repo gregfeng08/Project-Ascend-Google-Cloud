@@ -2,12 +2,13 @@
 <meta charset="utf-8" />
 <title>Client</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="https://use.typekit.net/ake2rry.css">
 <style>
   :root { color-scheme: light dark; }
   html, body { height: 100%; margin: 0; }
   body {
     display:flex; align-items:center; justify-content:center;
-    background:#111; color:#eee; font-family:system-ui, Arial;
+    background:#111; color:#eee; font-family:"bitcount-mono-double-square", system-ui; font-weight:400; font-style:normal;
     padding: env(safe-area-inset-top) 8px env(safe-area-inset-bottom);
   }
   #wrap { width: 100%; max-width: 900px; text-align: center; position: relative; }
@@ -57,6 +58,14 @@
   const serverSceneEl = document.getElementById("serverScene");
   const classLabel = document.getElementById("classEl");
   const help = document.getElementById("help");
+
+  const CLASS_NAMES = {
+    1: "Bard",
+    2: "Druid",
+    3: "Rogue",
+    4: "Wizard",
+    5: "Paladin",
+  };
 
   var internalCtr = {obedience:0,selfishness:0,sacrifice:0};
 
@@ -112,9 +121,11 @@
 
   // Class select
   socket.on("classSet", ({ classId }) => {
-    userClass = classId; classLabel.textContent = String(userClass);
+    userClass = classId;
+    const name = CLASS_NAMES[classId] || `Class ${classId}`;
+    classLabel.textContent = name;
     localStage = "Waiting";
-    help.textContent = "Waiting for the show to start…";
+    help.textContent = `You are a ${name}. Waiting for the show to start…`;
     socket.emit("joinAfterClass");
     render();
   });
@@ -125,11 +136,12 @@
     serverIndex = Number.isInteger(index) ? index : serverIndex;
     serverSceneEl.textContent = state;
 
-    if(state==="EndScene") {
+    if (state === "EndScene") {
       localStage = "EndScene";
-    } else if (localStage==="EndScene") {
-      localsTage = "EndScene";
+    } else if (localStage === "EndScene") {
+      localStage = "Waiting";
     }
+
     if (localStage === "Waiting" && isVoting(serverScene)) hasVoted = false;
 
     render();
@@ -152,12 +164,15 @@
 
   socket.on("notEligible", ({ scene, required }) => {
     if (scene === serverScene) {
-      help.textContent = `Not eligible. Allowed classes: ${required.join(", ")}`;
+      const pretty = required.map(c => CLASS_NAMES[c] || c).join(", ");
+      help.textContent = `Not eligible. Allowed classes: ${pretty}`;
       setTimeout(() => { if (help.textContent.startsWith("Not eligible")) help.textContent = ""; }, 2500);
     }
   });
 
-  function isVoting(name){ return name !== "Waiting"; }
+  function isVoting(name){
+    return name !== "Waiting" && name !== "EndScene";
+  }
 
   // Canvas + layout
   const canvas = document.getElementById("canvas");
@@ -315,7 +330,14 @@
 
     drawHeader("Class Select", 16, 24);
 
-    const labels = ["Class 1","Class 2","Class 3","Class 4","Class 5"];
+    const labels = [
+      "Bard",
+      "Druid",
+      "Rogue",
+      "Wizard",
+      "Paladin"
+    ];
+
     const cols = (h < 420 || w > 560) ? 2 : 1;
     const btnW = cols === 2 ? Math.min(w*0.42, 360) : Math.min(w*0.8, 520);
     const btnH = Math.max(44, Math.min(64, (h-140) / Math.ceil(labels.length/cols) - 12));
@@ -388,7 +410,16 @@
     const entry = currentMeta();
     const question = entry && entry.question ? entry.question : "Make your choice";
 
-    drawHeader(question, 16, 22);
+    // --- Wrapped Question Text ---
+    const width = canvas.clientWidth || 600;
+    ctx.fillStyle = "#fff";
+    ctx.font = "700 20px system-ui, Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+
+    // Wrap with 90% width or max 520 px
+    wrapText(question, width/2, 16, Math.min(w * 0.9, 520), 26);
+
 
     const btnW = Math.min(w * 0.8, 520);
     const btnH = Math.max(44, Math.min(64, (h-160)/sceneOptions.length - 12));
@@ -422,8 +453,10 @@
       });
     });
 
+    const myClassName = CLASS_NAMES[userClass] || userClass;
+
     if (!userClass)       help.textContent = "Select a class first in ClassSelect.";
-    else if (!eligible)   help.textContent = `Your class (${userClass}) is not eligible.`;
+    else if (!eligible)   help.textContent = `Your class (${myClassName}) is not eligible.`;
     else if (timeUp)      help.textContent = "Time's up — waiting for next round.";
     else if (hasVoted)    help.textContent = "Vote submitted — buttons locked.";
     else                  help.textContent = "Tap an option to vote.";

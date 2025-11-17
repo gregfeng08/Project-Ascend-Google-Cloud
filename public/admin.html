@@ -130,6 +130,14 @@
   const qText = document.getElementById("qText");
   const fText = document.getElementById("fText");
 
+  const CLASS_NAMES = {
+    1: "Bard",
+    2: "Druid",
+    3: "Rogue",
+    4: "Wizard",
+    5: "Paladin",
+  };
+
   // Timer canvas
   const timerCanvas = document.getElementById("adminTimer");
   const tctx = timerCanvas.getContext("2d");
@@ -235,7 +243,8 @@
       countsDiv.appendChild(span);
     }
     gating.style.display = "inline-block";
-    gating.textContent = `Allowed classes: ${allowedClasses.join(", ")}`;
+    const pretty = allowedClasses.map(c => CLASS_NAMES[c] || c).join(", ");
+    gating.textContent = `Allowed classes: ${pretty}`;
 
     const leaderEl = document.getElementById("leader");
     if (counts.length) {

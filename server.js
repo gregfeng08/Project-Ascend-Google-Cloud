@@ -12,6 +12,14 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+const CLASS_NAMES = {
+  1: "Bard",
+  2: "Druid",
+  3: "Rogue",
+  4: "Wizard",
+  5: "Paladin",
+};
+
 // Static
 app.use(express.static("public"));
 app.get("/admin", (_req, res) => {
@@ -26,7 +34,6 @@ const SCENE_ORDER = [
   { name: "BardTrial",   type: "vote", question:"Candidates of Song, three faces of your truth stand before you: one broken, one adored, one unremarkable. Which will you claim? Your Overseers recommend humility." },
   { name: "Waiting",     type: "hold", flavor:  "Bard stage" },
   { name: "DruidTrial",  type: "vote", question:"Druids: Will you bow to comparison, steady yourselves in contentment, or entrust your fruit distribution to your Palantell Overseer?" },
-  { name: "Waiting",     type: "hold", flavor:  "Druid stage" },
   { name: "RogueTrial",  type: "vote", question:"Will you clutch tighter to your treasure, loosen your grip for another's sake, or trust the only one who can truly maintain order — your Palantell Overseer?" },
   { name: "Waiting",     type: "hold", flavor:  "Rogue stage" },
   { name: "WizardTrial", type: "vote", question:"Now the lock wavers, unstable and consuming. You must choose how it will be resolved. You know the only one you can truly trust is the insight of your Overseer." },
@@ -150,16 +157,39 @@ function applyStateIndex(newIdx) {
 }
 
 // -------- API: clients per class --------
+// -------- API: clients per class --------
 app.get("/clients", (_req, res) => {
   const perClass = { 1:0, 2:0, 3:0, 4:0, 5:0 };
+
+  // Named counts: Bard, Druid, Rogue, Wizard, Paladin
+  const perClassNamed = {
+    Bard: 0,
+    Druid: 0,
+    Rogue: 0,
+    Wizard: 0,
+    Paladin: 0,
+  };
+
   let total = 0;
+
   io.sockets.sockets.forEach((s) => {
     const cls = s.data?.userClass;
     if (s.data?.joined && [1,2,3,4,5].includes(cls)) {
-      perClass[cls] += 1; total += 1;
+      perClass[cls] += 1;
+      total += 1;
+
+      const name = CLASS_NAMES[cls];
+      if (name && perClassNamed.hasOwnProperty(name)) {
+        perClassNamed[name] += 1;
+      }
     }
   });
-  res.json({ total_joined: total, per_class: perClass });
+
+  res.json({
+    total_joined: total,
+    per_class: perClass,          // numeric keys: { "1": 2, "2": 3, ... }
+    per_class_named: perClassNamed // human-readable: { Bard: 2, Druid: 3, ... }
+  });
 });
 
 // -------- API: Winner of the current vote --------
