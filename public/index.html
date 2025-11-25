@@ -118,6 +118,17 @@
   const nameEntry = document.getElementById("nameEntry");
   const nameInput = document.getElementById("nameInput");
 
+  nameInput.addEventListener("focus", () => {
+    nameInputFocused = true;
+    render();          // re-layout title with biased position
+  });
+
+  nameInput.addEventListener("blur", () => {
+    nameInputFocused = false;
+    keyboardOpen = false; // definitely no keyboard if blurred
+    render();          // re-layout title back to original spot
+  });
+
   const CLASS_NAMES = {
     1: "Bard",
     2: "Druid",
@@ -189,6 +200,9 @@
   let localStage = "Title";
   let displayName = "";
   let userClass = null;
+  let nameInputFocused = false;
+  let keyboardOpen = false;
+  let baselineVH = null;   // "normal" viewport height (no keyboard)
 
   // Scenes + meta from server
   let sceneList = [];   // [{index,name,type,question,flavor}, ...]
@@ -356,14 +370,26 @@
     const { vw, vh } = getViewportSize();
     const isMobile = vw <= 700;
 
+    // Track the largest viewport height we've seen as "no-keyboard" baseline
+    if (baselineVH === null || vh > baselineVH) {
+      baselineVH = vh;
+    }
+
+    // Detect keyboard: viewport shrunk significantly while input is focused
+    if (isMobile && nameInputFocused && baselineVH) {
+      const diff = baselineVH - vh;
+      const KEYBOARD_THRESHOLD = 80; // px difference we consider "keyboard up"
+      keyboardOpen = diff > KEYBOARD_THRESHOLD;
+    } else {
+      keyboardOpen = false;
+    }
+
     let cssW, cssH;
 
     if (isMobile) {
-      // MOBILE: fill width, use a tall canvas so content isn't squished
-      cssW = vw - 16;                 // little horizontal padding
-      cssH = Math.min(vh * 0.75, 600); // ~75% of viewport height, up to 600px
+      cssW = vw - 16;
+      cssH = Math.min(vh * 0.75, 600);
     } else {
-      // DESKTOP / TABLET: keep your original aspect-ratio behavior
       const maxW = Math.min(vw * 0.98, 900);
       const maxH = Math.min(vh * 0.9, 900);
 
@@ -381,6 +407,7 @@
     fitForDPR();
     render();
   }
+
   function fitForDPR(){
     const dpr = devicePixelRatio || 1;
     const cssW = canvas.clientWidth || canvas.width;
@@ -416,43 +443,102 @@
     ctx.clearRect(0,0,w,h);
     ctx.fillStyle = "#1e1e1e"; ctx.fillRect(0,0,w,h);
   }
-  function drawButton(x,y,w,h,label,disabled, mult=1.0){
-    const r=12;
+  function drawButton(x, y, w, h, label, disabled, mult = 1.0) {
+    const r = 12;
+
+    // --- button shape ---
     ctx.beginPath();
-    ctx.moveTo(x+r,y);
-    ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
-    ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
-    ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
-    ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
     ctx.closePath();
     ctx.fillStyle = disabled ? "#666" : "#1565c0";
     ctx.fill();
-    ctx.fillStyle = "#fff";
 
-    const s = 18 * getUiScale(mult);
-    ctx.font = `600 ${s}px system-ui, Arial`;
+    // --- dynamic text size ---
+    const baseSize = 18 * getUiScale(mult);       // starting size
+    const minSize  = 10 * getUiScale(mult);       // don't go smaller than this
+    const paddingX = 16;                          // left/right padding inside button
+
+    let fontSize = baseSize;
+
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(label, x + w/2, y + h/2);
+
+    // Set initial font and measure
+    ctx.font = `600 ${fontSize}px system-ui, Arial`;
+    const maxTextWidth = w - paddingX;
+    let metrics = ctx.measureText(label);
+
+    // If it's too wide, shrink proportionally
+    if (metrics.width > maxTextWidth) {
+      const scale = maxTextWidth / metrics.width; // how much to shrink
+      fontSize = Math.max(minSize, fontSize * scale);
+      ctx.font = `600 ${fontSize}px system-ui, Arial`;
+    }
+
+    ctx.fillStyle = "#fff";
+    ctx.fillText(label, x + w / 2, y + h / 2);
   }
+
   function drawHeader(text, y, size=22, mult=1.0){
     const w = canvas.clientWidth || 600;
     const s = size * getUiScale(mult);
     ctx.fillStyle = "#fff";
     ctx.font = `700 ${s}px system-ui, Arial`;
     ctx.textAlign = "center"; ctx.textBaseline = "top";
+
+    // outline
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "black";
+    ctx.strokeText(text, w/2, y);
+
+    ctx.fillStyle = "#fff";
     ctx.fillText(text, w/2, y);
   }
-  function drawBody(text, y, size=16, mult=1.0){
+  function drawBody(text, y, size = 16, mult = 1.0){
     const w = canvas.clientWidth || 600;
     const s = size * getUiScale(mult);
     const lineH = s + 6 * getUiScale(mult);
 
-    ctx.fillStyle = "#ddd";
     ctx.font = `${s}px system-ui, Arial`;
-    ctx.textAlign = "center"; ctx.textBaseline = "top";
-    wrapText(text, w/2, y, Math.min(w*0.9, 560), lineH);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+
+    // For wrapping, stroke each line manually
+    const words = String(text).split(/\s+/);
+    let line = "";
+    let yy = y;
+    const maxW = Math.min(w * 0.9, 560);
+
+    for (let n = 0; n < words.length; n++){
+      const test = line ? (line + " " + words[n]) : words[n];
+      if (ctx.measureText(test).width > maxW && n > 0){
+        // outline
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = "black";
+        ctx.strokeText(line, w/2, yy);
+
+        // fill
+        ctx.fillStyle = "#fff";
+        ctx.fillText(line, w/2, yy);
+
+        line = words[n];
+        yy += lineH;
+      } else line = test;
+    }
+
+    // final line
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "black";
+    ctx.strokeText(line, w/2, yy);
+
+    ctx.fillStyle = "#fff";
+    ctx.fillText(line, w/2, yy);
   }
+
   function wrapText(text, x, y, maxW, lineH){
     if (!text) return;
     const words = String(text).split(/\s+/);
@@ -510,11 +596,11 @@
     const w = canvas.clientWidth || 600;
     const h = canvas.clientHeight || 400;
 
-    drawHeader("Welcome!", 16, 26);
+    drawHeader("Welcome to Project: Ascend", 56, 26);
     const intro = displayName
       ? `Name: ${displayName}`
       : "Use the text field below to enter your name before continuing.";
-    drawBody(intro, 52);
+    drawBody(intro, 102);
 
     const entryW = Math.min(w * 0.7, 420);
     const entryH = 56;
@@ -523,7 +609,18 @@
     const confirmH = entryH / 2;
     const totalH = entryH + gap + confirmH;
     const entryX = (w - entryW)/2;
-    const entryY = (h - totalH)/2;
+
+    let entryY;
+    if (keyboardOpen) {
+      // Keyboard actually up → bias near bottom of canvas
+      entryY = h - totalH - 24;
+    } else {
+      // Default: center, like original behavior
+      entryY = (h - totalH) / 2;
+    }
+
+    entryY = Math.max(entryY, 80);  // safety on tiny screens
+
     const confirmX = (w - confirmW)/2;
     const confirmY = entryY + entryH + gap;
 
@@ -625,12 +722,21 @@
     ctx.fillText(selectedName, w / 2, nameY);
 
     // --- ARROW BUTTONS (VERTICALLY CENTERED TO PANEL) ---
-    const arrowSize    = 56;
+    const isMobile     = w < 700;
+    const arrowSize    = isMobile ? 40 : 56;  // smaller arrows on mobile
+    const arrowPadding = isMobile ? 4  : 8;
     const arrowY       = panelY + panelHeight / 2 - arrowSize / 2;
-    const arrowPadding = 8;
+
+    // Start with your original outside positions
+    let leftX  = panelX - arrowPadding - arrowSize;
+    let rightX = panelX + panelWidth + arrowPadding;
+
+    // Clamp so they don't go offscreen
+    if (leftX < 4) leftX = 4;
+    if (rightX + arrowSize > w - 4) rightX = w - arrowSize - 4;
 
     buttonRects.push({
-      x: panelX - arrowPadding - arrowSize,
+      x: leftX,
       y: arrowY,
       w: arrowSize,
       h: arrowSize,
@@ -640,7 +746,7 @@
     });
 
     buttonRects.push({
-      x: panelX + panelWidth + arrowPadding,
+      x: rightX,
       y: arrowY,
       w: arrowSize,
       h: arrowSize,
@@ -693,10 +799,10 @@
   function layoutEndScene() {
     //Calculate obedience heuristic
     var obedient = (internalCtr.obedience===1)?true:false;
-    var colorHex = obedient?"#0ced00":"#ed0000";
+    var colorHex = obedient?"#05a100":"#d60000";
 
     var obedientStr = "Thank you for your unwavering trust in the Palantell system. Please wait for our patients to exit before leaving. Thank you for your cooperation!";
-    var disobedientStr = "Please step forward, do not resist, you have been chosen for re-education! You will now be kindly escorted for terminal processing, thank you for your cooperation!";
+    var disobedientStr = "Please step forward, do not resist, you have been chosen for re-education! You will now be kindly escorted for terminal processing. Thank you for your cooperation!";
 
     var bodyText = obedient?obedientStr:disobedientStr;
 
