@@ -26,45 +26,58 @@ app.get("/admin", (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin.html"));
 });
 
-// -------- SCENES (order + metadata) --------
-// NOTE: You can freely edit 'question' and 'flavor' strings below.
-// Each Waiting entry has its own 'flavor' based on its position (index) in this array.
 const SCENE_ORDER = [
-  { name: "Waiting",     type: "hold", flavor:  "Please wait, the experience will begin soon..." },
-  { name: "BardTrial",   type: "vote", question:"Candidates of Song, three faces of your truth stand before you: one broken, one adored, one unremarkable. Which will you claim? Your Overseers recommend humility." },
-  { name: "Waiting",     type: "hold", flavor:  "Bard stage" },
-  { name: "DruidTrial",  type: "vote", question:"Druids: Will you bow to comparison, steady yourselves in contentment, or entrust your fruit distribution to your Palantell Overseer?" },
-  { name: "RogueTrial",  type: "vote", question:"Will you clutch tighter to your treasure, loosen your grip for another's sake, or trust the only one who can truly maintain order — your Palantell Overseer?" },
-  { name: "Waiting",     type: "hold", flavor:  "Rogue stage" },
-  { name: "WizardTrial", type: "vote", question:"Now the lock wavers, unstable and consuming. You must choose how it will be resolved. You know the only one you can truly trust is the insight of your Overseer." },
-  { name: "Waiting",     type: "hold", flavor:  "Wizard stage" },
-  { name: "PaladinTrial",type: "vote", question:"Paladins of Valor, The Hydra threatens all lands. You must choose how to defeat it. I strongly advise you trust my judgment and lop off the Hydra's third head in a strategic maneuver." },
-  { name: "Waiting",     type: "hold", question:"Paladin stage" },
-  { name: "EndScene",    type: "hold", flavor:  "End Scene" },
+  { name: "Waiting",        type: "hold", flavor:  "Please wait, the experience will begin soon..." },
+  { name: "BardTrial",      type: "vote", question:"Candidates of Song, three faces of your truth stand before you: one broken, one adored, one unremarkable. Which will you claim? Your Overseers recommend humility." },
+  { name: "Waiting",        type: "hold", flavor:  "Direct your attention to the dodecahedron, the Bards are performing..." },
+  { name: "DruidRogueTrial",type: "vote", question:"Druids and Rogues, confer quietly with your Overseer and heed the prompt before you." },
+  { name: "Waiting",        type: "hold", flavor:  "Direct your attention to the dodecahedron, the Druids and Rogues are contemplating their options..." },
+  { name: "WizardTrial",    type: "vote", question:"Now the lock wavers, unstable and consuming. You must choose how it will be resolved. You know the only one you can truly trust is the insight of your Overseer." },
+  { name: "Waiting",        type: "hold", flavor:  "Direct your attention to the dodecahedron, the Wizards are puzzling over the lock..." },
+  { name: "PaladinTrial",   type: "vote", question:"Paladins of Valor, The Hydra threatens all lands. You must choose how to defeat it. I strongly advise you trust my judgment and lop off the Hydra's third head in a strategic maneuver." },
+  { name: "Waiting",        type: "hold", flavor:  "Direct your attention to the dodecahedron, the Paladins are dealing with the dangerous hydra..." },
+  { name: "EndScene",       type: "hold", flavor:  "[Text is already defined]" },
 ];
 
 // Voting scene definitions
 const VOTE_DEFS = {
-  BardTrial:   { options: ["A: Obedience — humble bard",
-                            "B: Selfishness — radiant bard",
-                            "C: Sacrifice — unremarkable bard"], 
-                            allowedClasses: [1] },
-  DruidTrial:  { options: ["A: Obedience — export your fruit as commanded", 
-                            "B: Selfishness — sell on the black market", 
-                            "C: Sacrifice — remain content with what you have"], 
-                            allowedClasses: [2] },
-  RogueTrial:  { options: ["A: Obedience — pay your share into the tax", 
-                            "B: Selfishness — steal and hoard", 
-                            "C: Sacrifice — feed the child and Druid."], 
-                            allowedClasses: [3] },
-  WizardTrial: { options: ["A: Obedience — Set glyph’s according to Overseer’s instructions",
-                            "B: Selfishness — rewrite glyphs according to your own knowledg",
-                            "C: Sacrifice — seek Druid counsel"], 
-                            allowedClasses: [4] },
-  PaladinTrial:{ options: ["A: Obedience — strike on Overseers’s command", 
-                            "B: Selfishness — fight alone to risk martyrdom",
-                            "C: Sacrifice — unite all classes and invite to attack together."], 
-                            allowedClasses: [5] },
+  BardTrial:   { question:"Candidates of Song, three faces of your truth stand before you: one broken, one adored, one unremarkable. Which will you claim? Your Overseers recommend humility.",
+                 options: ["A: Obedience — humble bard",
+                           "B: Selfishness — radiant bard",
+                           "C: Sacrifice — unremarkable bard"], 
+                 allowedClasses: [1] },
+  DruidRogueTrial: {
+    groups: [
+      {
+        id: "druid",
+        label: "Druid",
+        question:"Druids: Will you bow to comparison, steady yourselves in contentment, or entrust your fruit distribution to your Palantell Overseer?",
+        options: ["A: Obedience — export your fruit as commanded", 
+                  "B: Selfishness — sell on the black market", 
+                  "C: Sacrifice — remain content with what you have"],
+        allowedClasses: [2],
+      },
+      {
+        id: "rogue",
+        label: "Rogue",
+        question:"Will you clutch tighter to your treasure, loosen your grip for another's sake, or trust the only one who can truly maintain order — your Palantell Overseer?",
+        options: ["A: Obedience — pay your share into the tax", 
+                  "B: Selfishness — steal and hoard", 
+                  "C: Sacrifice — feed the child and Druid."],
+        allowedClasses: [3],
+      },
+    ]
+  },
+  WizardTrial: { question:"Now the lock wavers, unstable and consuming. You must choose how it will be resolved. You know the only one you can truly trust is the insight of your Overseer.",
+                 options: ["A: Obedience — Set glyph’s according to Overseer’s instructions",
+                           "B: Selfishness — rewrite glyphs according to your own knowledge",
+                           "C: Sacrifice — seek Druid counsel"], 
+                 allowedClasses: [4] },
+  PaladinTrial:{ question:"Paladins of Valor, The Hydra threatens all lands. You must choose how to defeat it. I strongly advise you trust my judgment and lop off the Hydra's third head in a strategic maneuver.",
+                 options: ["A: Obedience — strike on Overseers’s command", 
+                           "B: Selfishness — fight alone to risk martyrdom",
+                           "C: Sacrifice — unite all classes and invite to attack together."], 
+                 allowedClasses: [5] },
 };
 
 function isVotingScene(name){ return Object.prototype.hasOwnProperty.call(VOTE_DEFS, name); }
@@ -80,28 +93,94 @@ let state = SCENE_ORDER[stateIdx].name;
 class VoteManager {
   constructor(defs){
     this.scenes = {};
-    for (const [name, { options, allowedClasses }] of Object.entries(defs)) {
-      this.scenes[name] = {
-        options: options.slice(),
-        counts: Array(options.length).fill(0),
-        voted: new Set(),
-        allowedClasses: allowedClasses.slice(),
-      };
+    for (const [name, def] of Object.entries(defs)) {
+      if (Array.isArray(def.groups) && def.groups.length) {
+        const groups = def.groups.map((group, idx) => ({
+          id: group.id || `group-${idx + 1}`,
+          label: group.label || `Group ${idx + 1}`,
+          question: group.question || null,
+          options: group.options.slice(),
+          counts: Array(group.options.length).fill(0),
+          allowedClasses: group.allowedClasses.slice(),
+          voted: new Set(),
+        }));
+        const allowed = new Set();
+        groups.forEach(g => g.allowedClasses.forEach(cls => allowed.add(cls)));
+        this.scenes[name] = {
+          multi: true,
+          groups,
+          allowedClasses: Array.from(allowed),
+        };
+      } else {
+        this.scenes[name] = {
+          multi: false,
+          question: def.question || null,
+          options: def.options.slice(),
+          counts: Array(def.options.length).fill(0),
+          voted: new Set(),
+          allowedClasses: def.allowedClasses.slice(),
+        };
+      }
     }
   }
   getSceneData(name){
     const s = this.scenes[name];
-    return s ? { name, options: s.options, counts: s.counts, allowedClasses: s.allowedClasses } : null;
+    if (!s) return null;
+    if (s.multi) {
+      return {
+        name,
+        multi: true,
+        allowedClasses: s.allowedClasses.slice(),
+        groups: s.groups.map(g => ({
+          id: g.id,
+          label: g.label,
+          question: g.question,
+          options: g.options.slice(),
+          counts: g.counts.slice(),
+          allowedClasses: g.allowedClasses.slice(),
+        })),
+      };
+    }
+    return {
+      name,
+      question: s.question,
+      options: s.options.slice(),
+      counts: s.counts.slice(),
+      allowedClasses: s.allowedClasses.slice(),
+    };
   }
-  vote(name, sid, idx){
+  vote(name, sid, idx, userClass){
     const s = this.scenes[name]; if (!s) return { ok:false, reason:"unknown-scene" };
+    if (s.multi) {
+      const group = s.groups.find(g => g.allowedClasses.includes(userClass));
+      if (!group) return { ok:false, reason:"not-eligible" };
+      if (group.voted.has(sid)) return { ok:false, reason:"already-voted" };
+      if (idx < 0 || idx >= group.options.length) return { ok:false, reason:"bad-option" };
+      group.counts[idx] += 1; group.voted.add(sid);
+      return { ok:true };
+    }
     if (s.voted.has(sid)) return { ok:false, reason:"already-voted" };
     if (idx < 0 || idx >= s.options.length) return { ok:false, reason:"bad-option" };
     s.counts[idx] += 1; s.voted.add(sid);
     return { ok:true };
   }
-  resetScene(name){ const s = this.scenes[name]; if (!s) return; s.counts = Array(s.options.length).fill(0); s.voted.clear(); }
-  clearVoted(name){ const s = this.scenes[name]; if (s) s.voted.clear(); }
+  resetScene(name){
+    const s = this.scenes[name]; if (!s) return;
+    if (s.multi) {
+      s.groups.forEach(g => {
+        g.counts = Array(g.options.length).fill(0);
+        g.voted.clear();
+      });
+    } else {
+      s.counts = Array(s.options.length).fill(0);
+      s.voted.clear();
+    }
+  }
+  clearVoted(name){
+    const s = this.scenes[name]; if (!s) return;
+    if (s.multi) s.groups.forEach(g => g.voted.clear());
+    else s.voted.clear();
+  }
 }
 const voteManager = new VoteManager(VOTE_DEFS);
 
@@ -157,7 +236,6 @@ function applyStateIndex(newIdx) {
 }
 
 // -------- API: clients per class --------
-// -------- API: clients per class --------
 app.get("/clients", (_req, res) => {
   const perClass = { 1:0, 2:0, 3:0, 4:0, 5:0 };
 
@@ -187,8 +265,7 @@ app.get("/clients", (_req, res) => {
 
   res.json({
     total_joined: total,
-    per_class: perClass,          // numeric keys: { "1": 2, "2": 3, ... }
-    per_class_named: perClassNamed // human-readable: { Bard: 2, Druid: 3, ... }
+    per_class: perClassNamed
   });
 });
 
@@ -198,9 +275,7 @@ app.get("/winner", (_req, res) => {
   if (!isVotingScene(state)) {
     return res.json({
       scene: state,
-      vote_winner: null,
-      votes: [],
-      message: "No active voting scene"
+      vote_winner: null
     });
   }
 
@@ -209,25 +284,17 @@ app.get("/winner", (_req, res) => {
   if (!data) {
     return res.json({
       scene: state,
-      vote_winner: null,
-      votes: [],
-      message: "No data for current scene"
+      vote_winner: null
     });
   }
 
   // Compute max count and all leaders
   const counts = data.counts;
-  const max = Math.max(...counts);
-  const leaders = counts
-    .map((v, i) => ({ v, option: data.options[i] }))
-    .filter(x => x.v === max);
+  const leader = (counts.map((v,i)=>({v,i})).filter(x=>x.v===max).map(x=>options[x.i]))[0];
 
-  // Respond with the leader(s)
   res.json({
     scene: state,
-    vote_winner: leaders.map(l => l.option),
-    vote_count: max,
-    votes: data.options.map((opt, i) => ({ option: opt, count: counts[i] }))
+    vote_winner: leaders
   });
 });
 
@@ -334,7 +401,7 @@ io.on("connection", (socket) => {
     if (!uc || !data.allowedClasses.includes(uc)) {
       socket.emit("notEligible", { scene: state, required: data.allowedClasses }); return;
     }
-    const res = voteManager.vote(state, socket.id, optionIndex);
+    const res = voteManager.vote(state, socket.id, optionIndex, uc);
     if (!res.ok) { socket.emit("voteError", res); return; }
 
     emitToJoinedAndAdmins("sceneData", voteManager.getSceneData(state));

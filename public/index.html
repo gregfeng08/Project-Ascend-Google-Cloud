@@ -66,6 +66,7 @@
     4: "Wizard",
     5: "Paladin",
   };
+  const CLASS_ORDER = [1,2,3,4,5];
 
   var internalCtr = {obedience:0,selfishness:0,sacrifice:0};
 
@@ -106,6 +107,9 @@
   let hasVoted = false;
   let sceneOptions = [];
   let allowedClasses = [];
+  let currentSceneData = null;
+  let sceneQuestionOverride = null;
+  let classPickerIndex = 0;
 
   // Timer
   let timerRemainingMs = 0;
@@ -122,16 +126,19 @@
   // Class select
   socket.on("classSet", ({ classId }) => {
     userClass = classId;
+    syncPickerToUser();
     const name = CLASS_NAMES[classId] || `Class ${classId}`;
     classLabel.textContent = name;
     localStage = "Waiting";
     help.textContent = `You are a ${name}. Waiting for the show to start…`;
     socket.emit("joinAfterClass");
+    applySceneDataForUser();
     render();
   });
 
   // State updates (include index so we can read flavor/question)
   socket.on("state", ({ state, index }) => {
+    const prevScene = serverScene;
     serverScene = state; 
     serverIndex = Number.isInteger(index) ? index : serverIndex;
     serverSceneEl.textContent = state;
@@ -142,15 +149,60 @@
       localStage = "Waiting";
     }
 
-    if (localStage === "Waiting" && isVoting(serverScene)) hasVoted = false;
+    if (state !== prevScene) {
+      hasVoted = false;
+      currentSceneData = null;
+      sceneQuestionOverride = null;
+      sceneOptions = [];
+      allowedClasses = [];
+    } else if (localStage === "Waiting" && isVoting(serverScene)) {
+      hasVoted = false;
+    }
 
     render();
   });
 
-  socket.on("sceneData", ({ name, options, counts, allowedClasses: allowed }) => {
-    if (name !== serverScene) return;
-    sceneOptions = options.slice();
-    allowedClasses = allowed.slice();
+  function copyList(list){ return Array.isArray(list) ? list.slice() : []; }
+  function findGroupForUser(data){
+    if (!data || !Array.isArray(data.groups) || !userClass) return null;
+    return data.groups.find(g => Array.isArray(g.allowedClasses) && g.allowedClasses.includes(userClass)) || null;
+  }
+  function currentPickerClass(){
+    return CLASS_ORDER[classPickerIndex] || CLASS_ORDER[0];
+  }
+  function syncPickerToUser(){
+    if (userClass && CLASS_ORDER.includes(userClass)) {
+      classPickerIndex = CLASS_ORDER.indexOf(userClass);
+    } else if (classPickerIndex < 0 || classPickerIndex >= CLASS_ORDER.length) {
+      classPickerIndex = 0;
+    }
+  }
+  function applySceneDataForUser(){
+    if (!currentSceneData || currentSceneData.name !== serverScene) return;
+    if (currentSceneData.multi) {
+      const group = findGroupForUser(currentSceneData);
+      if (group) {
+        sceneOptions = Array.isArray(group.options) ? group.options.slice() : [];
+        allowedClasses = copyList(group.allowedClasses);
+        sceneQuestionOverride = group.question || null;
+      } else {
+        sceneOptions = [];
+        allowedClasses = copyList(currentSceneData.allowedClasses);
+        sceneQuestionOverride = currentSceneData.name === "DruidRogueTrial"
+          ? "filler text DruidRogue"
+          : null;
+      }
+    } else {
+      sceneOptions = Array.isArray(currentSceneData.options) ? currentSceneData.options.slice() : [];
+      allowedClasses = copyList(currentSceneData.allowedClasses);
+      sceneQuestionOverride = currentSceneData.question || null;
+    }
+  }
+
+  socket.on("sceneData", (payload) => {
+    if (payload.name !== serverScene) return;
+    currentSceneData = payload;
+    applySceneDataForUser();
     render();
   });
 
@@ -265,6 +317,12 @@
     }
     ctx.fillText(line, x, yy);
   }
+  function cyclePicker(delta){
+    const len = CLASS_ORDER.length;
+    if (!len) return;
+    classPickerIndex = (classPickerIndex + delta + len) % len;
+    render();
+  }
   function fmtSeconds(ms){ const s = Math.ceil(ms / 1000); return Math.max(0, s).toString(); }
   function drawTimerOverlay(){
     if (!isVoting(serverScene)) return;
@@ -319,7 +377,12 @@
     buttonRects.push({
       x, y: y0 + btnH + gap, w: btnW, h: btnH, label: "Continue to Class Select",
       disabled: false,
-      onClick: () => { localStage = "ClassSelect"; help.textContent = "Choose your class to join."; render(); }
+      onClick: () => {
+        syncPickerToUser();
+        localStage = "ClassSelect";
+        help.textContent = "Use arrows to choose your class, then confirm.";
+        render();
+      }
     });
   }
 
@@ -328,37 +391,81 @@
     const w = canvas.clientWidth || 600;
     const h = canvas.clientHeight || 400;
 
-    drawHeader("Class Select", 16, 24);
+    drawHeader("Select Your Class", 20, 26);
 
-    const labels = [
-      "Bard",
-      "Druid",
-      "Rogue",
-      "Wizard",
-      "Paladin"
-    ];
+    const selectedId = currentPickerClass();
+    const selectedName = CLASS_NAMES[selectedId] || `Class ${selectedId}`;
 
-    const cols = (h < 420 || w > 560) ? 2 : 1;
-    const btnW = cols === 2 ? Math.min(w*0.42, 360) : Math.min(w*0.8, 520);
-    const btnH = Math.max(44, Math.min(64, (h-140) / Math.ceil(labels.length/cols) - 12));
-    const gapX = 16, gapY = 12;
+    const panelWidth = Math.min(w * 0.75, 420);
+    const panelHeight = Math.min(h * 0.35, 200);
+    const panelX = (w - panelWidth) / 2;
+    const panelY = Math.max(70, (h - panelHeight) / 2 - 20);
 
-    const totalRows = Math.ceil(labels.length / cols);
-    const gridW = cols*btnW + (cols-1)*gapX;
-    const gridH = totalRows*btnH + (totalRows-1)*gapY;
-    const x0 = (w - gridW)/2;
-    const y0 = Math.max(70, (h - gridH)/2);
+    ctx.fillStyle = "#222";
+    ctx.strokeStyle = "#555";
+    ctx.lineWidth = 2;
+    const r = 16;
+    ctx.beginPath();
+    ctx.moveTo(panelX + r, panelY);
+    ctx.lineTo(panelX + panelWidth - r, panelY);
+    ctx.quadraticCurveTo(panelX + panelWidth, panelY, panelX + panelWidth, panelY + r);
+    ctx.lineTo(panelX + panelWidth, panelY + panelHeight - r);
+    ctx.quadraticCurveTo(panelX + panelWidth, panelY + panelHeight, panelX + panelWidth - r, panelY + panelHeight);
+    ctx.lineTo(panelX + r, panelY + panelHeight);
+    ctx.quadraticCurveTo(panelX, panelY + panelHeight, panelX, panelY + panelHeight - r);
+    ctx.lineTo(panelX, panelY + r);
+    ctx.quadraticCurveTo(panelX, panelY, panelX + r, panelY);
+    ctx.fill();
+    ctx.stroke();
 
-    labels.forEach((lab, i) => {
-      const c = cols === 2 ? (i % 2) : 0;
-      const r = cols === 2 ? Math.floor(i/2) : i;
-      const x = x0 + c*(btnW + gapX);
-      const y = y0 + r*(btnH + gapY);
-      buttonRects.push({
-        x, y, w: btnW, h: btnH, label: lab, disabled: false,
-        onClick: () => socket.emit("setClass", { classId: i+1 })
-      });
+    ctx.fillStyle = "#fff";
+    ctx.font = "700 28px system-ui, Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(selectedName, w / 2, panelY + panelHeight / 2 - 10);
+
+    ctx.font = "16px system-ui, Arial";
+    ctx.fillStyle = "#bbb";
+    ctx.fillText("Use ◀ ▶ to browse classes", w / 2, panelY + panelHeight - 32);
+
+    const arrowSize = 60;
+    const arrowY = panelY + panelHeight / 2 - arrowSize / 2;
+    const arrowPadding = 12;
+
+    buttonRects.push({
+      x: panelX - arrowPadding - arrowSize,
+      y: arrowY,
+      w: arrowSize,
+      h: arrowSize,
+      label: "◀",
+      disabled: false,
+      onClick: () => cyclePicker(-1),
     });
+    buttonRects.push({
+      x: panelX + panelWidth + arrowPadding,
+      y: arrowY,
+      w: arrowSize,
+      h: arrowSize,
+      label: "▶",
+      disabled: false,
+      onClick: () => cyclePicker(1),
+    });
+
+    const confirmWidth = Math.min(w * 0.6, 360);
+    const confirmX = (w - confirmWidth) / 2;
+    const confirmY = panelY + panelHeight + 30;
+
+    buttonRects.push({
+      x: confirmX,
+      y: confirmY,
+      w: confirmWidth,
+      h: 60,
+      label: `Confirm ${selectedName}`,
+      disabled: false,
+      onClick: () => socket.emit("setClass", { classId: selectedId }),
+    });
+
+    help.textContent = "Choose your class with the arrows, then confirm.";
   }
 
   function layoutWaiting(){
@@ -405,10 +512,11 @@
 
     const eligible = userClass && allowedClasses.includes(userClass);
     const timeUp   = timerRemainingMs <= 0;
+    const myClassName = CLASS_NAMES[userClass] || userClass;
 
     // Question from scene meta
     const entry = currentMeta();
-    const question = entry && entry.question ? entry.question : "Make your choice";
+    const question = sceneQuestionOverride || (entry && entry.question ? entry.question : "Make your choice");
 
     // --- Wrapped Question Text ---
     const width = canvas.clientWidth || 600;
@@ -420,8 +528,19 @@
     // Wrap with 90% width or max 520 px
     wrapText(question, width/2, 16, Math.min(w * 0.9, 520), 26);
 
+    if (!sceneOptions.length) {
+      drawBody("Awaiting instructions for your class…", Math.max(90, h * 0.45));
+      if (!eligible && userClass) {
+        help.textContent = `Your class (${myClassName}) is not eligible.`;
+      } else if (!userClass) {
+        help.textContent = "Select a class first in ClassSelect.";
+      } else {
+        help.textContent = "Waiting for options…";
+      }
+      return;
+    }
 
-    const btnW = Math.min(w * 0.8, 520);
+    const btnW = Math.min(w * 0.8, 520)+20;
     const btnH = Math.max(44, Math.min(64, (h-160)/sceneOptions.length - 12));
     const gap = 12;
     const totalH = sceneOptions.length*btnH + (sceneOptions.length-1)*gap;
@@ -452,8 +571,6 @@
         }
       });
     });
-
-    const myClassName = CLASS_NAMES[userClass] || userClass;
 
     if (!userClass)       help.textContent = "Select a class first in ClassSelect.";
     else if (!eligible)   help.textContent = `Your class (${myClassName}) is not eligible.`;

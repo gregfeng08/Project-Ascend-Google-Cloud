@@ -12,6 +12,9 @@
   #adminTimer { background:#1e1e1e; border:1px solid #333; border-radius:10px; }
   fieldset { border:1px solid #aaa; border-radius:10px; padding:10px 12px; }
   legend { padding: 0 6px; opacity:.85; }
+.groupBlock { background:#f7f7f7; border-radius:10px; padding:10px 12px; min-width:220px; margin:6px 0; box-shadow: inset 0 0 0 1px #e0e0e0; }
+.groupBlock strong { display:block; margin-bottom:6px; font-size: 15px; }
+.groupQuestion { font-size:14px; margin-bottom:8px; opacity:.8; }
 
   #leader {
     font-weight: 800;
@@ -64,7 +67,7 @@
   <!-- Auto-start timer on scene change -->
   <div class="row">
     <label>
-      <input type="checkbox" id="autoStartChk" />
+      <input type="checkbox" id="autoStartChk" checked/>
       Auto-start timer on scene change
     </label>
   </div>
@@ -215,7 +218,7 @@
   }
 
   // Auto-start flag
-  let pendingAutoStart = false;
+  let pendingAutoStart = true;
   socket.on("state", ({ state, index }) => {
     current.textContent = state;
     if (Number.isInteger(index)) sel.value = String(index);
@@ -235,22 +238,81 @@
   });
 
   // Vote totals + winning indicator
-  socket.on("sceneData", ({ name, options, counts, allowedClasses }) => {
+  socket.on("sceneData", (data) => {
+    if (!data) return;
     countsDiv.innerHTML = "";
-    for (let i=0; i<options.length; i++) {
-      const span = document.createElement("span");
-      span.innerHTML = `${options[i]}: <span class="badge">${counts[i]}</span>`;
-      countsDiv.appendChild(span);
+    const allowed = Array.isArray(data.allowedClasses) ? data.allowedClasses : [];
+    if (allowed.length) {
+      gating.style.display = "inline-block";
+      const pretty = allowed.map(c => CLASS_NAMES[c] || c).join(", ");
+      gating.textContent = `Allowed classes: ${pretty}`;
+    } else {
+      gating.style.display = "none";
     }
-    gating.style.display = "inline-block";
-    const pretty = allowedClasses.map(c => CLASS_NAMES[c] || c).join(", ");
-    gating.textContent = `Allowed classes: ${pretty}`;
 
     const leaderEl = document.getElementById("leader");
+
+    if (data.multi && Array.isArray(data.groups)) {
+      if (!data.groups.length) {
+        leaderEl.style.display = "none";
+        return;
+      }
+      data.groups.forEach((group) => {
+        const block = document.createElement("div");
+        block.className = "groupBlock";
+
+        const title = document.createElement("strong");
+        title.textContent = `${group.label || "Group"}`;
+        block.appendChild(title);
+
+        if (group.question) {
+          const q = document.createElement("div");
+          q.className = "groupQuestion";
+          q.textContent = group.question;
+          block.appendChild(q);
+        }
+
+        const options = Array.isArray(group.options) ? group.options : [];
+        const counts = Array.isArray(group.counts) ? group.counts : [];
+        for (let i = 0; i < options.length; i++) {
+          const span = document.createElement("div");
+          span.innerHTML = `${options[i]}: <span class="badge">${counts[i] ?? 0}</span>`;
+          block.appendChild(span);
+        }
+        countsDiv.appendChild(block);
+      });
+
+      const leaderSummaries = data.groups.map((group) => {
+        const options = Array.isArray(group.options) ? group.options : [];
+        const counts = Array.isArray(group.counts) ? group.counts : [];
+        if (!counts.length) return `${group.label || "Group"}: No votes yet`;
+        const max = Math.max(...counts);
+        if (max <= 0) return `${group.label || "Group"}: No votes yet`;
+        const leaders = counts
+          .map((v, i) => ({ v, label: options[i] }))
+          .filter(item => item.v === max && item.label)
+          .map(item => item.label);
+        const label = leaders.length ? leaders.join(", ") : "No votes yet";
+        return `${group.label || "Group"} leading: ${label} (${max})`;
+      });
+
+      leaderEl.style.display = "block";
+      leaderEl.textContent = leaderSummaries.join(" | ");
+      return;
+    }
+
+    const options = Array.isArray(data.options) ? data.options : [];
+    const counts = Array.isArray(data.counts) ? data.counts : [];
+    for (let i=0; i<options.length; i++) {
+      const span = document.createElement("span");
+      span.innerHTML = `${options[i]}: <span class="badge">${counts[i] ?? 0}</span>`;
+      countsDiv.appendChild(span);
+    }
+
     if (counts.length) {
       const max = Math.max(...counts);
       const leader = (counts.map((v,i)=>({v,i})).filter(x=>x.v===max).map(x=>options[x.i]))[0];
-      if (max > 0) {
+      if (max > 0 && leader) {
         leaderEl.style.display = "block";
         leaderEl.textContent = `Leading: ${leader} (${max})`;
       } else {
