@@ -773,7 +773,7 @@
       y: confirmY,
       w: confirmWidth,
       h: 60,
-      label: `Confirm ${selectedName}`,
+      label: `Confirm`,
       disabled: false,
       onClick: () => socket.emit("setClass", { classId: selectedId }),
     });
@@ -832,7 +832,6 @@
     const entry = currentMeta();
     const question = sceneQuestionOverride || (entry && entry.question ? entry.question : "Make your choice");
 
-
     const width = canvas.clientWidth || 600;
     const isMobile = width < 700;
 
@@ -867,8 +866,15 @@
     const btnH = Math.max(44, Math.min(64, (h-160)/sceneOptions.length - 12));
     const gap = 12;
     const totalH = sceneOptions.length*btnH + (sceneOptions.length-1)*gap;
-    const x = (w - btnW)/2;
-    const startY = Math.max(90, (h - totalH)/2);
+    const x = (w - btnW) / 2;
+
+    // Use a lower baseline on desktop so the buttons sit further down,
+    // but keep the existing behavior on mobile.
+    const isMobileForButtons = (canvas.clientWidth || w) < 700;
+    const baseTop = isMobileForButtons ? 90 : 130;     // desktop shifted down
+    const centerOffset = isMobileForButtons ? 0 : 20;  // tiny extra push down on desktop
+
+    const startY = Math.max(baseTop, (h - totalH) / 2 + centerOffset);
 
     sceneOptions.forEach((lab, i) => {
       buttonRects.push({
