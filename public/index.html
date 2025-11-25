@@ -396,14 +396,20 @@
       localStage = "Waiting";
     }
 
+    const cachedIdx =
+      selectionHistory && Object.prototype.hasOwnProperty.call(selectionHistory, state)
+        ? selectionHistory[state]
+        : null;
+    const alreadyVotedForScene = cachedIdx !== null && cachedIdx !== undefined;
+
     if (state !== prevScene) {
-      hasVoted = false;
       currentSceneData = null;
       sceneQuestionOverride = null;
       sceneOptions = [];
       allowedClasses = [];
+      hasVoted = alreadyVotedForScene;
     } else if (localStage === "Waiting" && isVoting(serverScene)) {
-      hasVoted = false;
+      hasVoted = alreadyVotedForScene;
     }
 
     render();
@@ -987,6 +993,16 @@
     const w = canvas.clientWidth || 600;
     const h = canvas.clientHeight || 400;
 
+    // ----- NEW: use cached selection + hasVoted to lock buttons -----
+    const sceneName = serverScene || "unknown";
+    const cachedIdx =
+      selectionHistory && Object.prototype.hasOwnProperty.call(selectionHistory, sceneName)
+        ? selectionHistory[sceneName]
+        : null;
+    const alreadyVotedForScene = cachedIdx !== null && cachedIdx !== undefined;
+    const lockedOut = alreadyVotedForScene || hasVoted;
+    // ---------------------------------------------------------------
+
     const eligible = userClass && allowedClasses.includes(userClass);
     const timeUp   = timerRemainingMs <= 0;
     const myClassName = CLASS_NAMES[userClass] || userClass;
@@ -1003,14 +1019,11 @@
     const qLineH = qSize + 6 * getUiScale(qMult);  // line spacing
 
     ctx.fillStyle   = "#fff";
-    ctx.font        = `700 ${qSize}px system-ui, Arial`;  // <-- now uses qSize
+    ctx.font        = `700 ${qSize}px system-ui, Arial`;
     ctx.textAlign   = "center";
     ctx.textBaseline = "top";
 
-    // push further down on mobile so it never touches the timer
     const questionTop = isMobile ? 72 : 40;
-
-    // Wrap with 90% width or max 520 px
     wrapText(question, width / 2, questionTop, Math.min(w * 0.9, 520), qLineH);
 
     if (!sceneOptions.length) {
@@ -1025,27 +1038,25 @@
       return;
     }
 
-    const btnW = Math.min(w * 0.8, 520)+20;
-    const btnH = Math.max(44, Math.min(64, (h-160)/sceneOptions.length - 12));
+    const btnW = Math.min(w * 0.8, 520) + 20;
+    const btnH = Math.max(44, Math.min(64, (h - 160) / sceneOptions.length - 12));
     const gap = 12;
-    const totalH = sceneOptions.length*btnH + (sceneOptions.length-1)*gap;
+    const totalH = sceneOptions.length * btnH + (sceneOptions.length - 1) * gap;
     const x = (w - btnW) / 2;
 
-    // Use a lower baseline on desktop so the buttons sit further down,
-    // but keep the existing behavior on mobile.
     const isMobileForButtons = (canvas.clientWidth || w) < 700;
-    const baseTop = isMobileForButtons ? 90 : 130;     // desktop shifted down
-    const centerOffset = isMobileForButtons ? 0 : 20;  // tiny extra push down on desktop
-
+    const baseTop = isMobileForButtons ? 140 : 130;
+    const centerOffset = isMobileForButtons ? 0 : 20;
     const startY = Math.max(baseTop, (h - totalH) / 2 + centerOffset);
 
     sceneOptions.forEach((lab, i) => {
       buttonRects.push({
-        x, y: startY + i*(btnH+gap), w: btnW, h: btnH, label: lab, mult: 0.6,
-        disabled: hasVoted || !eligible || timeUp,
+        x, y: startY + i * (btnH + gap), w: btnW, h: btnH, label: lab, mult: 0.6,
+        disabled: lockedOut || !eligible || timeUp,
         onClick: () => {
-          if (hasVoted || !eligible || timeUp) return;
-          hasVoted = true; 
+          if (lockedOut || !eligible || timeUp) return;
+
+          hasVoted = true;
           switch (i) {
             case 0:
               internalCtr.obedience++;
@@ -1058,7 +1069,7 @@
               break;
             default:
           }
-          // persist selection for this scene
+
           const sceneName = serverScene || "unknown";
           selectionHistory[sceneName] = i;
           localStorage.setItem(STORAGE_KEYS.selections, JSON.stringify(selectionHistory));
@@ -1069,11 +1080,11 @@
       });
     });
 
-    if (!userClass)       help.textContent = "Select a class first in ClassSelect.";
-    else if (!eligible)   help.textContent = `Your class (${myClassName}) is not eligible.`;
-    else if (timeUp)      help.textContent = "Time's up — waiting for next round.";
-    else if (hasVoted)    help.textContent = "Vote submitted — buttons locked.";
-    else                  help.textContent = "Tap an option to vote.";
+    if (!userClass)            help.textContent = "Select a class first in ClassSelect.";
+    else if (!eligible)        help.textContent = `Your class (${myClassName}) is not eligible.`;
+    else if (timeUp)           help.textContent = "Time's up — waiting for next round.";
+    else if (lockedOut)        help.textContent = "You’ve already voted in this scene — buttons are locked.";
+    else                       help.textContent = "Tap an option to vote.";
   }
 
   function render(){
