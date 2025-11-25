@@ -177,10 +177,29 @@
   drawAdminTimer();
 
   const socket = io();
-  socket.emit("identify", { role: "admin" });
 
-  socket.on("connect", () => { connDot.style.backgroundColor = "limegreen"; statusEl.textContent = "Connected: " + socket.id; });
-  socket.on("disconnect", () => { connDot.style.backgroundColor = "red"; statusEl.textContent = "Disconnected… (auto-retrying)"; });
+  // Prompt for admin password once when the page loads
+  let adminPw = prompt("Enter admin password:");
+
+  socket.emit("identify", {
+    role: "admin",
+    adminPw: adminPw || ""
+  });
+
+  socket.on("authError", ({ reason }) => {
+    alert("Admin authentication failed. Please refresh and try again.");
+    // Optional: you can also disable controls here if you want
+  });
+
+  socket.on("connect", () => {
+    connDot.style.backgroundColor = "limegreen";
+    statusEl.textContent = "Connected: " + socket.id;
+  });
+
+  socket.on("disconnect", () => {
+    connDot.style.backgroundColor = "red";
+    statusEl.textContent = "Disconnected… (auto-retrying)";
+  });
 
   // Scene list with meta (index-based)
   let sceneList = []; // [{index,name,type,question,flavor}, ...]

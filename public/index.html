@@ -192,6 +192,45 @@
   };
   const CLASS_ORDER = [1,2,3,4,5];
 
+  // ----- class capacity UI -----
+  const MAX_PER_CLASS = 16;
+
+  // Will be kept in sync with /clients
+  // Shape: { Bard: number, Druid: number, ... }
+  let classCounts = {
+    Bard: 0,
+    Druid: 0,
+    Rogue: 0,
+    Wizard: 0,
+    Paladin: 0,
+  };
+
+  async function fetchClassCounts() {
+    try {
+      const res = await fetch("/clients");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data || !data.per_class) return;
+
+      // update counts
+      classCounts = {
+        ...classCounts,
+        ...data.per_class,
+      };
+
+      // If we're on the class select screen, re-render so numbers update
+      if (localStage === "ClassSelect") {
+        render();
+      }
+    } catch (err) {
+      console.warn("Failed to fetch class counts", err);
+    }
+  }
+
+  // poll every 2 seconds; also kick off once at startup
+  setInterval(fetchClassCounts, 2000);
+  fetchClassCounts();
+
   // Image assets (paths relative to /public)
   const IMG_BACKGROUND_FOREST   = "Images/Backgrounds/updatedforest(big).png";
   const IMG_BARD_STATIC         = "Images/Characters/Large_BardStatic.png";
@@ -421,6 +460,12 @@
   socket.on("timer", ({ remainingMs, durationMs }) => {
     timerRemainingMs = remainingMs; timerDurationMs = durationMs; render();
   });
+
+  socket.on("classFull", ({ classId, max }) => {
+    const name = CLASS_NAMES[classId] || `Class ${classId}`;
+    help.textContent = `${name} is full (${max} participants). Please choose another class.`;
+  });
+
 
   socket.on("notEligible", ({ scene, required }) => {
     if (scene === serverScene) {
@@ -736,7 +781,12 @@
     drawHeader("Select Your Class", 20, 26);
 
     const selectedId   = currentPickerClass();
-    const selectedName = CLASS_NAMES[selectedId] || `Class ${selectedId}`;
+    const baseName     = CLASS_NAMES[selectedId] || `Class ${selectedId}`;
+
+    // look up how many are in this class by name
+    const classKey     = baseName; // matches keys in classCounts
+    const occupied     = classCounts[classKey] || 0;
+    const isFull       = occupied >= MAX_PER_CLASS;
 
     // --- PANEL SIZE / POSITION ---
     const panelWidth  = Math.min(w * 0.8, 420);
@@ -765,7 +815,7 @@
     // --- CONTENT AREA INSIDE PANEL ---
     const contentTop    = panelY + 20;
     const contentBottom = panelY + panelHeight - 20;
-    const nameY         = contentBottom - 20; // class name just above bottom padding
+    const nameY         = contentBottom - 32; // move name up a bit to make room for slots text
 
     // --- CHARACTER IMAGE (NO OVERLAP) ---
     const img = classImageCache[selectedId];
@@ -796,7 +846,15 @@
     ctx.font        = "700 24px system-ui, Arial";
     ctx.textAlign   = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(selectedName, w / 2, nameY);
+    ctx.fillText(baseName, w / 2, nameY);
+
+    // --- SLOTS TEXT (X / 16) ---
+    const slotsText = `${occupied} / ${MAX_PER_CLASS} slots filled`;
+    ctx.font = "14px system-ui, Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = isFull ? "#ff8080" : "#a0ffa0";
+    ctx.fillText(slotsText, w / 2, nameY + 20);
 
     // --- ARROW BUTTONS (VERTICALLY CENTERED TO PANEL) ---
     const isMobile     = w < 700;
@@ -832,7 +890,7 @@
       onClick: () => cyclePicker(1),
     });
 
-    // --- HINT TEXT BELOW PANEL (NO LONGER OVERLAPS SPRITE) ---
+    // --- HINT TEXT BELOW PANEL ---
     ctx.font = "16px system-ui, Arial";
     ctx.fillStyle = "#bbb";
     ctx.textAlign = "center";
@@ -845,19 +903,25 @@
     const confirmX     = (w - confirmWidth) / 2;
     const confirmY     = hintY + 32;
 
+    const confirmLabel = isFull ? `${baseName} Full` : `Confirm`;
+
     buttonRects.push({
       x: confirmX,
       y: confirmY,
       w: confirmWidth,
       h: 60,
-      label: `Confirm`,
-      disabled: false,
-      onClick: () => socket.emit("setClass", { classId: selectedId }),
+      label: confirmLabel,
+      disabled: isFull, // can't click if full
+      onClick: () => {
+        if (isFull) return; // safety
+        socket.emit("setClass", { classId: selectedId });
+      },
     });
 
-    help.textContent = "Choose your class with the arrows, then confirm.";
+    help.textContent = isFull
+      ? `${baseName} is full. Please choose another class.`
+      : "Choose your class with the arrows, then confirm.";
   }
-
 
   function layoutWaiting(){
     buttonRects = [];

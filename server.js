@@ -12,6 +12,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+const ADMIN_PW = process.env.PROJECT_ASCEND_ADMINPW || "";
+
 const CLASS_NAMES = {
   1: "Bard",
   2: "Druid",
@@ -19,6 +21,8 @@ const CLASS_NAMES = {
   4: "Wizard",
   5: "Paladin",
 };
+
+const MAX_PER_CLASS = 16;
 
 // Static
 app.use(express.static("public"));
@@ -321,8 +325,14 @@ io.on("connection", (socket) => {
     io.emit("resetClientCache");
   });
 
-  socket.on("identify", ({ role }) => {
+  socket.on("identify", ({ role, adminPw }) => {
     if (role === "admin") {
+      // If an admin password is configured, enforce it
+      if (ADMIN_PW && adminPw !== ADMIN_PW) {
+        socket.emit("authError", { reason: "bad-admin-password" });
+        return; // do NOT add to adminSockets
+      }
+
       adminSockets.add(socket.id);
       clientSockets.delete(socket.id);
       socket.emit("state", { state, index: stateIdx });
@@ -339,7 +349,24 @@ io.on("connection", (socket) => {
   });
 
   socket.on("setClass", ({ classId }) => {
-    if (![1,2,3,4,5].includes(classId)) return;
+    if (![1, 2, 3, 4, 5].includes(classId)) return;
+
+    // Count how many *active sockets* are already using this class
+    let currentCount = 0;
+    io.sockets.sockets.forEach(s => {
+      if (s.data?.userClass === classId) currentCount++;
+    });
+
+    if (currentCount >= MAX_PER_CLASS) {
+      // Tell this client that the class is full
+      socket.emit("classFull", {
+        classId,
+        max: MAX_PER_CLASS,
+      });
+      return;
+    }
+
+    // Otherwise, accept the class selection
     socket.data.userClass = classId;
     socket.emit("classSet", { classId });
   });
