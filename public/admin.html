@@ -61,6 +61,9 @@
     <button id="apply">Select Scene</button>
     <button id="next">Next Scene</button>
     <button id="reset">Reset Counts</button>
+    <button id="clearCache" style="background:#f9dada;border:1px solid #c33;">
+      Reset Client Cache
+    </button>
     <span id="sceneType" class="pill" style="display:none;"></span>
   </div>
 
@@ -76,7 +79,7 @@
     <strong>Current server scene:</strong> <span id="current">Waiting</span>
   </div>
 
-  <!-- NEW: scene meta display -->
+  <!-- Scene meta display -->
   <div id="sceneMeta">
     <div id="metaQuestion" style="display:none;"><span class="label">Question:</span><span id="qText"></span></div>
     <div id="metaFlavor"   style="display:none;"><span class="label">Flavor:</span><span id="fText"></span></div>
@@ -94,6 +97,12 @@
     <canvas id="adminTimer" width="260" height="70"></canvas>
   </div>
   <div class="row" id="timerHint" style="opacity:.75;">Timer only runs on voting scenes.</div>
+</fieldset>
+
+<!-- Connected Players -->
+<fieldset style="margin-top:14px;">
+  <legend>Connected Players</legend>
+  <div id="playerCounts" class="counts"></div>
 </fieldset>
 
 <!-- Vote totals -->
@@ -122,6 +131,8 @@
   const gating = document.getElementById("gating");
   const sceneTypePill = document.getElementById("sceneType");
   const autoStartChk = document.getElementById("autoStartChk");
+  const playerCountsDiv = document.getElementById("playerCounts");
+  const clearCacheBtn = document.getElementById("clearCache");
 
   const secondsInput = document.getElementById("seconds");
   const startBtn = document.getElementById("start");
@@ -339,5 +350,39 @@
     const secs = Math.max(1, Number(secondsInput.value) || 30);
     socket.emit("startTimer", { seconds: secs });
   });
+  clearCacheBtn.addEventListener("click", () => {
+    if (confirm("Reset cached name/class/selections for all clients?")) {
+      socket.emit("resetClientCache");
+    }
+  });
   stopBtn.addEventListener("click", () => socket.emit("stopTimer"));
+
+  // --- Player counts by class (calls existing /clients endpoint) ---
+  async function refreshPlayerCounts() {
+    try {
+      const res = await fetch("/clients");
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+
+      const per = data.per_class || {};
+      const total = data.total_joined || 0;
+
+      playerCountsDiv.innerHTML = `
+        <span>Total joined: <span class="badge">${total}</span></span>
+        <span>Bard:   <span class="badge">${per.Bard   || 0}</span></span>
+        <span>Druid:  <span class="badge">${per.Druid  || 0}</span></span>
+        <span>Rogue:  <span class="badge">${per.Rogue  || 0}</span></span>
+        <span>Wizard: <span class="badge">${per.Wizard || 0}</span></span>
+        <span>Paladin:<span class="badge">${per.Paladin|| 0}</span></span>
+      `;
+    } catch (err) {
+      playerCountsDiv.textContent = "Error fetching player counts";
+      console.error(err);
+    }
+  }
+
+  // refresh immediately and then every 2 seconds
+  refreshPlayerCounts();
+  setInterval(refreshPlayerCounts, 2000);
+
 </script>

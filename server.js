@@ -27,7 +27,7 @@ app.get("/admin", (_req, res) => {
 });
 
 const SCENE_ORDER = [
-  { name: "Waiting",        type: "hold", flavor:  "Please wait, the experience will begin soon..." },
+  { name: "Waiting",        type: "hold", flavor:  "Thank you for your patience, the experience will begin soon..." },
   { name: "BardTrial",      type: "vote", question:"Candidates of Song, three faces of your truth stand before you: one broken, one adored, one unremarkable. Which will you claim? Your Overseers recommend humility." },
   { name: "Waiting",        type: "hold", flavor:  "Direct your attention to the dodecahedron, the Bards are performing..." },
   { name: "DruidRogueTrial",type: "vote", question:"Druids and Rogues, confer quietly with your Overseer and heed the prompt before you.",
@@ -314,6 +314,11 @@ io.on("connection", (socket) => {
       question: s.question || null,
       flavor: s.flavor || null
     }))
+  });
+
+  socket.on("resetClientCache", () => {
+    if (!adminSockets.has(socket.id)) return;
+    io.emit("resetClientCache");
   });
 
   socket.on("identify", ({ role }) => {

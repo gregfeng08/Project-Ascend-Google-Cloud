@@ -117,6 +117,60 @@
   const help = document.getElementById("help");
   const nameEntry = document.getElementById("nameEntry");
   const nameInput = document.getElementById("nameInput");
+  
+
+  // ----- localStorage keys + helpers -----
+  const STORAGE_KEYS = {
+    name: "name",
+    class: "class",
+    selections: "selections", // JSON: { [sceneName]: optionIndex }
+  };
+
+  let selectionHistory = {}; // sceneName -> optionIndex
+  let autoJoinFromStorage = false; // if true, we’ll auto-join on connect
+
+  // Client local pipeline: Title -> ClassSelect -> Waiting
+  let localStage = "Title";
+  let displayName = "";
+  let userClass = null;
+  let nameInputFocused = false;
+  let keyboardOpen = false;
+  let baselineVH = null;   // "normal" viewport height (no keyboard)
+
+  function loadPersistedState() {
+    // name
+    const savedName = localStorage.getItem(STORAGE_KEYS.name);
+    if (savedName) {
+      displayName = savedName;
+      nameInput.value = savedName;
+    }
+
+    // class
+    const savedClass = localStorage.getItem(STORAGE_KEYS.class);
+    if (savedClass) {
+      const cls = Number(savedClass);
+      if ([1, 2, 3, 4, 5].includes(cls)) {
+        userClass = cls;
+        classLabel.textContent = CLASS_NAMES[cls] || "not selected";
+      }
+    }
+
+    // selections
+    const savedSelections = localStorage.getItem(STORAGE_KEYS.selections);
+    if (savedSelections) {
+      try {
+        selectionHistory = JSON.parse(savedSelections) || {};
+      } catch {
+        selectionHistory = {};
+      }
+    }
+
+    // If we have BOTH a name and a class, skip Title/ClassSelect
+    if (displayName && userClass) {
+      autoJoinFromStorage = true;
+      localStage = "Waiting";
+    }
+  }
 
   nameInput.addEventListener("focus", () => {
     nameInputFocused = true;
@@ -176,12 +230,37 @@
   const socket = io();
   socket.emit("identify", { role: "client" });
 
+  socket.on("resetClientCache", () => {
+    try {
+      localStorage.removeItem("name");
+      localStorage.removeItem("class");
+      localStorage.removeItem("selections");
+
+      internalCtr = {obedience:0,selfishness:0,sacrifice:0};
+    } catch (e) {
+      console.warn("Failed to clear localStorage", e);
+    }
+    // Force a full reload so the flow restarts from Title/ClassSelect
+    location.reload();
+  });
+
   // Connection indicator behavior
   socket.on("connect", () => {
     connDot.style.backgroundColor = "limegreen";
     connDot.classList.remove("pulse");
     connText.textContent = "Connected";
     statusEl.textContent = "Connected: " + socket.id;
+
+    if (displayName) {
+      socket.emit("setName", { name: displayName });
+    }
+    if (autoJoinFromStorage && userClass) {
+      socket.emit("setClass", { classId: userClass });
+      // your existing "classSet" handler will then:
+      // - set localStage = "Waiting"
+      // - emit joinAfterClass
+      // - applySceneDataForUser + render()
+    }
   });
   socket.on("disconnect", () => {
     connDot.style.backgroundColor = "#900";
@@ -195,14 +274,6 @@
     connText.textContent = "Reconnected (attempt " + attempt + ")";
     setTimeout(() => connText.textContent = "Connected", 2000);
   });
-
-  // Client local pipeline: Title -> ClassSelect -> Waiting
-  let localStage = "Title";
-  let displayName = "";
-  let userClass = null;
-  let nameInputFocused = false;
-  let keyboardOpen = false;
-  let baselineVH = null;   // "normal" viewport height (no keyboard)
 
   // Scenes + meta from server
   let sceneList = [];   // [{index,name,type,question,flavor}, ...]
@@ -244,6 +315,10 @@
     if (ok) {
       displayName = name || "";
       nameInput.value = displayName;
+
+      // persist name
+      localStorage.setItem(STORAGE_KEYS.name, displayName);
+
       help.textContent = `Name set to ${displayName}. Choose your class when ready.`;
       if (pendingClassSelect) {
         pendingClassSelect = false;
@@ -253,20 +328,22 @@
       }
     }
   });
-
   // Class select
   socket.on("classSet", ({ classId }) => {
     userClass = classId;
     syncPickerToUser();
     const name = CLASS_NAMES[classId] || `Class ${classId}`;
     classLabel.textContent = name;
+
+    // persist class
+    localStorage.setItem(STORAGE_KEYS.class, String(classId));
+
     localStage = "Waiting";
     help.textContent = `You are a ${name}. Waiting for the show to start…`;
     socket.emit("joinAfterClass");
     applySceneDataForUser();
     render();
   });
-
   // State updates (include index so we can read flavor/question)
   socket.on("state", ({ state, index }) => {
     const prevScene = serverScene;
@@ -798,25 +875,47 @@
 
   function layoutEndScene() {
     //Calculate obedience heuristic
-    var obedient = (internalCtr.obedience===1)?true:false;
-    var colorHex = obedient?"#05a100":"#d60000";
+    var obedient = (internalCtr.obedience === 1);
+    var colorHex = obedient ? "#05a100" : "#d60000";
 
-    var obedientStr = "Thank you for your unwavering trust in the Palantell system. Please wait for our patients to exit before leaving. Thank you for your cooperation!";
-    var disobedientStr = "Please step forward, do not resist, you have been chosen for re-education! You will now be kindly escorted for terminal processing. Thank you for your cooperation!";
+    // Participant header line
+    var playerTitle = `Participant ${socket.id} — ${nameInput.value || "Unknown"}`;
 
-    var bodyText = obedient?obedientStr:disobedientStr;
+    var obedientStr =
+      `Thank you for your unwavering trust in the Palantell system. ` +
+      `Please wait for our patients to exit before leaving. Thank you for your cooperation!`;
+
+    var disobedientStr =
+      `Please raise your hand. Do not resist, you have been chosen for re-education! ` +
+      `You will now be kindly escorted for terminal processing. Thank you for your cooperation!`;
+
+    var bodyText = obedient ? obedientStr : disobedientStr;
 
     buttonRects = [];
 
     const w = canvas.clientWidth || 600;
     const h = canvas.clientHeight || 400;
 
+    // Background color (green/red)
     ctx.fillStyle = colorHex;
     ctx.fillRect(0, 0, w, h);
 
-    drawHeader("Algorithmic Evaluation", Math.max(16, h*0.2), 26);
-    drawBody(bodyText, Math.max(60, h*0.2 + 34));
-    help.textContent = "We deeply appreciate your trust in allowing Palantell to lovingly determine who ascends to our higher standard of living and who remains for processing—all for the sake of nurturing divine harmony.";
+    // Title
+    drawHeader("Algorithmic Evaluation", Math.max(16, h * 0.18), 26);
+
+    // Draw participant ID line (smaller text, slightly below header)
+    ctx.fillStyle = "#fff";
+    ctx.font = "700 18px system-ui, Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+
+    ctx.fillText(playerTitle, w / 2, Math.max(16, h * 0.18) + 36);
+
+    // Body text — shifted down to avoid overlap
+    drawBody(bodyText, Math.max(16, h * 0.18) + 80);
+
+    help.textContent =
+      "We deeply appreciate your trust in allowing Palantell to lovingly determine who ascends to our higher standard of living.";
   }
 
   function layoutVoting(){
@@ -883,7 +982,7 @@
         onClick: () => {
           if (hasVoted || !eligible || timeUp) return;
           hasVoted = true; 
-          switch(i) {
+          switch (i) {
             case 0:
               internalCtr.obedience++;
               break;
@@ -895,6 +994,11 @@
               break;
             default:
           }
+          // persist selection for this scene
+          const sceneName = serverScene || "unknown";
+          selectionHistory[sceneName] = i;
+          localStorage.setItem(STORAGE_KEYS.selections, JSON.stringify(selectionHistory));
+
           render();
           socket.emit("vote", { optionIndex: i });
         }
@@ -972,6 +1076,7 @@
     }
   }, { passive:true });
 
+  loadPersistedState();
   render();
   resizeCanvasToViewport();
 </script>
