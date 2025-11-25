@@ -30,7 +30,9 @@ const SCENE_ORDER = [
   { name: "Waiting",        type: "hold", flavor:  "Please wait, the experience will begin soon..." },
   { name: "BardTrial",      type: "vote", question:"Candidates of Song, three faces of your truth stand before you: one broken, one adored, one unremarkable. Which will you claim? Your Overseers recommend humility." },
   { name: "Waiting",        type: "hold", flavor:  "Direct your attention to the dodecahedron, the Bards are performing..." },
-  { name: "DruidRogueTrial",type: "vote", question:"Druids and Rogues, confer quietly with your Overseer and heed the prompt before you." },
+  { name: "DruidRogueTrial",type: "vote", question:"Druids and Rogues, confer quietly with your Overseer and heed the prompt before you.",
+                                          flavor:  "Direct your attention to the dodecahedron as the Druids and Rogues deliberate under Overseer guidance..."
+                                        },
   { name: "Waiting",        type: "hold", flavor:  "Direct your attention to the dodecahedron, the Druids and Rogues are contemplating their options..." },
   { name: "WizardTrial",    type: "vote", question:"Now the lock wavers, unstable and consuming. You must choose how it will be resolved. You know the only one you can truly trust is the insight of your Overseer." },
   { name: "Waiting",        type: "hold", flavor:  "Direct your attention to the dodecahedron, the Wizards are puzzling over the lock..." },

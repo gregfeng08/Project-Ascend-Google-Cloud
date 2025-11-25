@@ -5,15 +5,42 @@
 <link rel="stylesheet" href="https://use.typekit.net/ake2rry.css">
 <style>
   :root { color-scheme: light dark; }
+
   html, body { height: 100%; margin: 0; }
+
+  /* Desktop / tablet: center everything */
   body {
-    display:flex; align-items:center; justify-content:center;
-    background:#111; color:#eee; font-family:"bitcount-mono-double-square", system-ui; font-weight:400; font-style:normal;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #111;
+    color: #eee;
+    font-family: "bitcount-mono-double-square", system-ui;
+    font-weight: 400;
+    font-style: normal;
     padding: env(safe-area-inset-top) 8px env(safe-area-inset-bottom);
   }
+
+  /* Mobile: turn off flex-centering, allow scroll */
+  @media (max-width: 700px) {
+    html, body {
+      height: auto;  /* stop forcing 100% viewport height */
+    }
+
+    body {
+      display: block;  /* no flex-centering on mobile */
+      padding: env(safe-area-inset-top) 8px env(safe-area-inset-bottom);
+    }
+
+    #wrap {
+      max-width: 100%;
+      margin: 0 auto;
+      text-align: center;
+    }
+  }
+
   #wrap { width: 100%; max-width: 900px; text-align: center; position: relative; }
   canvas { background:#1e1e1e; border:1px solid #333; border-radius:12px; touch-action: manipulation; }
-
   /* Connection indicator */
   #connStatus {
     position: absolute;
@@ -36,6 +63,31 @@
   .pulse { animation: pulseRed 1.2s infinite ease-in-out; }
 
   .hint { opacity:.85; font-size:14px; margin-top:8px; }
+
+  #nameEntry {
+    position: absolute;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+    z-index: 5;
+  }
+  #nameEntry input {
+    text-align: center;
+    flex: 1;
+    min-width: 0;
+    padding: 8px 12px;
+    font-size: 16px;
+    border-radius: 8px;
+    border: 1px solid #555;
+    background: #1c1c1c;
+    color: #fafafa;
+    height: 100%;
+    box-sizing: border-box;
+  }
+  #nameEntry button {
+    display: none;
+  }
 </style>
 
 <div id="wrap">
@@ -46,6 +98,10 @@
   <p>Server scene: <strong id="serverScene">Waiting</strong></p>
   <p>Your class: <strong id="classEl">not selected</strong></p>
   <canvas id="canvas" width="600" height="400"></canvas>
+  <div id="nameEntry">
+    <input id="nameInput" type="text" maxlength="40" placeholder="Enter your name" autocomplete="off" />
+    <button id="nameSave">Save Name</button>
+  </div>
   <p id="help" class="hint">Enter your name, then choose a class to join.</p>
   <p id="status" style="opacity:.7;margin-top:10px;">&nbsp;</p>
 </div>
@@ -57,7 +113,10 @@
   const statusEl = document.getElementById("status");
   const serverSceneEl = document.getElementById("serverScene");
   const classLabel = document.getElementById("classEl");
+  const wrap = document.getElementById("wrap");
   const help = document.getElementById("help");
+  const nameEntry = document.getElementById("nameEntry");
+  const nameInput = document.getElementById("nameInput");
 
   const CLASS_NAMES = {
     1: "Bard",
@@ -67,6 +126,39 @@
     5: "Paladin",
   };
   const CLASS_ORDER = [1,2,3,4,5];
+
+  // Image assets (paths relative to /public)
+  const IMG_BACKGROUND_FOREST   = "Images/Backgrounds/updatedforest(big).png";
+  const IMG_BARD_STATIC         = "Images/Characters/Large_BardStatic.png";
+  const IMG_DRUID_STATIC        = "Images/Characters/Large_DruidStatic.png";
+  const IMG_ROGUE_STATIC        = "Images/Characters/Large_RogueStatic.png";
+  const IMG_WIZARD_STATIC       = "Images/Characters/Large_WizardStatic.png";
+  const IMG_PALADIN_STATIC      = "Images/Characters/Large_PaladinStatic.png";
+  const IMG_ARROW_LEFT          = "Images/UI/Large_ArrowUI.png";
+  const IMG_ARROW_RIGHT         = "Images/UI/Large_ArrowUI2.png";
+  const IMG_BANNER              = "Images/UI/Large_BannerUI.png";
+  const IMG_FRAME_SELECT        = "Images/UI/Large_SelectUI.png";
+  const IMG_SELECT_HOVER        = "Images/UI/Large_SelectHover.png";
+  const IMG_BUTTON_LONG         = "Images/UI/Large_LongUI.png";
+  const IMG_OPTION_CARD         = "Images/UI/Large_Optionui.png";
+  const IMG_BACKGROUND_PANEL    = "Images/UI/Large_BKGui.png";
+  const IMG_STAT_PANEL          = "Images/UI/Large_StatUI.png";
+
+  const CLASS_IMAGES = {
+    1: IMG_BARD_STATIC,
+    2: IMG_DRUID_STATIC,
+    3: IMG_ROGUE_STATIC,
+    4: IMG_WIZARD_STATIC,
+    5: IMG_PALADIN_STATIC,
+  };
+
+  const classImageCache = {};
+
+  for (const [id, src] of Object.entries(CLASS_IMAGES)) {
+    const img = new Image();
+    img.src = src;
+    classImageCache[id] = img;
+  }
 
   var internalCtr = {obedience:0,selfishness:0,sacrifice:0};
 
@@ -120,8 +212,33 @@
     sceneList = scenes.slice();
   });
 
+  let pendingClassSelect = false;
+
+  function submitNameEntry({ requestClassSelect = false } = {}){
+    if (localStage !== "Title") return;
+    const val = (nameInput.value || "").trim();
+    if (!val) {
+      help.textContent = "Enter your name before continuing.";
+      return;
+    }
+    if (requestClassSelect) pendingClassSelect = true;
+    socket.emit("setName", { name: val });
+  }
+
   // Title name set
-  socket.on("nameSet", ({ ok, name }) => { if (ok) { displayName = name || ""; render(); } });
+  socket.on("nameSet", ({ ok, name }) => {
+    if (ok) {
+      displayName = name || "";
+      nameInput.value = displayName;
+      help.textContent = `Name set to ${displayName}. Choose your class when ready.`;
+      if (pendingClassSelect) {
+        pendingClassSelect = false;
+        goToClassSelect();
+      } else {
+        render();
+      }
+    }
+  });
 
   // Class select
   socket.on("classSet", ({ classId }) => {
@@ -235,15 +352,34 @@
     const vv = window.visualViewport;
     return { vw: vv ? vv.width : innerWidth, vh: vv ? vv.height : innerHeight };
   }
-  function resizeCanvasToViewport(){
+  function resizeCanvasToViewport() {
     const { vw, vh } = getViewportSize();
-    const maxW = Math.min(vw * 0.98, 900);
-    const maxH = Math.min(vh * 0.92, 900);
-    let cssW = maxW, cssH = cssW / ASPECT;
-    if (cssH > maxH) { cssH = maxH; cssW = cssH * ASPECT; }
-    canvas.style.width = cssW + "px";
+    const isMobile = vw <= 700;
+
+    let cssW, cssH;
+
+    if (isMobile) {
+      // MOBILE: fill width, use a tall canvas so content isn't squished
+      cssW = vw - 16;                 // little horizontal padding
+      cssH = Math.min(vh * 0.75, 600); // ~75% of viewport height, up to 600px
+    } else {
+      // DESKTOP / TABLET: keep your original aspect-ratio behavior
+      const maxW = Math.min(vw * 0.98, 900);
+      const maxH = Math.min(vh * 0.9, 900);
+
+      cssW = maxW;
+      cssH = cssW / ASPECT;
+      if (cssH > maxH) {
+        cssH = maxH;
+        cssW = cssH * ASPECT;
+      }
+    }
+
+    canvas.style.width  = cssW + "px";
     canvas.style.height = cssH + "px";
-    fitForDPR(); render();
+
+    fitForDPR();
+    render();
   }
   function fitForDPR(){
     const dpr = devicePixelRatio || 1;
@@ -253,6 +389,16 @@
     canvas.height = Math.round(cssH * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
+  function getUiScale(mult = 1.0) {
+    const w = canvas.clientWidth || window.innerWidth;
+
+    const isMobile = w < 700;
+
+    if (!isMobile) return 1.0;
+
+    return mult;
+  }
+
   let rafReq = null;
   function scheduleResize(){
     if (rafReq) return;
@@ -270,7 +416,7 @@
     ctx.clearRect(0,0,w,h);
     ctx.fillStyle = "#1e1e1e"; ctx.fillRect(0,0,w,h);
   }
-  function drawButton(x,y,w,h,label,disabled){
+  function drawButton(x,y,w,h,label,disabled, mult=1.0){
     const r=12;
     ctx.beginPath();
     ctx.moveTo(x+r,y);
@@ -282,24 +428,30 @@
     ctx.fillStyle = disabled ? "#666" : "#1565c0";
     ctx.fill();
     ctx.fillStyle = "#fff";
-    ctx.font = "600 18px system-ui, Arial";
+
+    const s = 18 * getUiScale(mult);
+    ctx.font = `600 ${s}px system-ui, Arial`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(label, x + w/2, y + h/2);
   }
-  function drawHeader(text, y, size=22){
+  function drawHeader(text, y, size=22, mult=1.0){
     const w = canvas.clientWidth || 600;
+    const s = size * getUiScale(mult);
     ctx.fillStyle = "#fff";
-    ctx.font = `700 ${size}px system-ui, Arial`;
+    ctx.font = `700 ${s}px system-ui, Arial`;
     ctx.textAlign = "center"; ctx.textBaseline = "top";
     ctx.fillText(text, w/2, y);
   }
-  function drawBody(text, y, size=16){
+  function drawBody(text, y, size=16, mult=1.0){
     const w = canvas.clientWidth || 600;
+    const s = size * getUiScale(mult);
+    const lineH = s + 6 * getUiScale(mult);
+
     ctx.fillStyle = "#ddd";
-    ctx.font = `${size}px system-ui, Arial`;
+    ctx.font = `${s}px system-ui, Arial`;
     ctx.textAlign = "center"; ctx.textBaseline = "top";
-    wrapText(text, w/2, y, Math.min(w*0.9, 560), size+6);
+    wrapText(text, w/2, y, Math.min(w*0.9, 560), lineH);
   }
   function wrapText(text, x, y, maxW, lineH){
     if (!text) return;
@@ -347,6 +499,7 @@
   }
 
   let buttonRects = [];
+  let latestNameEntryRect = null;
 
   function currentMeta(){
     return sceneList.find(s => s.index === serverIndex) || null;
@@ -358,32 +511,47 @@
     const h = canvas.clientHeight || 400;
 
     drawHeader("Welcome!", 16, 26);
-    drawBody(displayName ? `Name: ${displayName}` : "Tap 'Enter Name' to set your name", 52);
+    const intro = displayName
+      ? `Name: ${displayName}`
+      : "Use the text field below to enter your name before continuing.";
+    drawBody(intro, 52);
 
-    const btnW = Math.min(w * 0.7, 420);
-    const btnH = 56; const gap = 16;
-    const totalH = btnH*2 + gap;
-    const x = (w - btnW)/2;
-    const y0 = (h - totalH)/2;
+    const entryW = Math.min(w * 0.7, 420);
+    const entryH = 56;
+    const gap = 16;
+    const confirmW = Math.min(entryW / 2, 210);
+    const confirmH = entryH / 2;
+    const totalH = entryH + gap + confirmH;
+    const entryX = (w - entryW)/2;
+    const entryY = (h - totalH)/2;
+    const confirmX = (w - confirmW)/2;
+    const confirmY = entryY + entryH + gap;
+
+    latestNameEntryRect = { x: entryX, y: entryY, w: entryW, h: entryH };
 
     buttonRects.push({
-      x, y: y0, w: btnW, h: btnH, label: "Enter Name",
+      x: confirmX, y: confirmY, w: confirmW, h: confirmH, label: "Confirm",
       disabled: false,
       onClick: () => {
-        const val = prompt("Enter your name (max 40 chars):", displayName || "");
-        if (val !== null) socket.emit("setName", { name: val });
+        const val = (nameInput.value || "").trim();
+        if (!val) {
+          help.textContent = "Enter your name before continuing.";
+          return;
+        }
+        if (!displayName || val !== displayName) {
+          submitNameEntry({ requestClassSelect: true });
+          return;
+        }
+        goToClassSelect();
       }
     });
-    buttonRects.push({
-      x, y: y0 + btnH + gap, w: btnW, h: btnH, label: "Continue to Class Select",
-      disabled: false,
-      onClick: () => {
-        syncPickerToUser();
-        localStage = "ClassSelect";
-        help.textContent = "Use arrows to choose your class, then confirm.";
-        render();
-      }
-    });
+  }
+
+  function goToClassSelect(){
+    syncPickerToUser();
+    localStage = "ClassSelect";
+    help.textContent = "Use arrows to choose your class, then confirm.";
+    render();
   }
 
   function layoutClassSelect(){
@@ -393,14 +561,16 @@
 
     drawHeader("Select Your Class", 20, 26);
 
-    const selectedId = currentPickerClass();
+    const selectedId   = currentPickerClass();
     const selectedName = CLASS_NAMES[selectedId] || `Class ${selectedId}`;
 
-    const panelWidth = Math.min(w * 0.75, 420);
-    const panelHeight = Math.min(h * 0.35, 200);
-    const panelX = (w - panelWidth) / 2;
-    const panelY = Math.max(70, (h - panelHeight) / 2 - 20);
+    // --- PANEL SIZE / POSITION ---
+    const panelWidth  = Math.min(w * 0.8, 420);
+    const panelHeight = Math.min(h * 0.55, 360);   // tall enough for sprite + text
+    const panelX      = (w - panelWidth) / 2;
+    const panelY      = Math.max(70, (h - panelHeight) / 2 - 10);
 
+    // --- PANEL DRAW ---
     ctx.fillStyle = "#222";
     ctx.strokeStyle = "#555";
     ctx.lineWidth = 2;
@@ -418,19 +588,46 @@
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = "#fff";
-    ctx.font = "700 28px system-ui, Arial";
-    ctx.textAlign = "center";
+    // --- CONTENT AREA INSIDE PANEL ---
+    const contentTop    = panelY + 20;
+    const contentBottom = panelY + panelHeight - 20;
+    const nameY         = contentBottom - 20; // class name just above bottom padding
+
+    // --- CHARACTER IMAGE (NO OVERLAP) ---
+    const img = classImageCache[selectedId];
+    if (img && img.complete) {
+      const aspect = img.height / img.width || 1;
+
+      const maxImgHeight = (nameY - 12) - contentTop; // space reserved for sprite
+      let   imgH         = maxImgHeight;
+      let   imgW         = imgH / aspect;
+
+      const maxImgWidth  = panelWidth * 0.55;
+      if (imgW > maxImgWidth) {
+        imgW = maxImgWidth;
+        imgH = imgW * aspect;
+        if (imgH > maxImgHeight) {
+          imgH = maxImgHeight;
+          imgW = imgH / aspect;
+        }
+      }
+
+      const ix = (w - imgW) / 2;
+      const iy = contentTop + (maxImgHeight - imgH) / 2;
+      ctx.drawImage(img, ix, iy, imgW, imgH);
+    }
+
+    // --- CLASS NAME BELOW SPRITE ---
+    ctx.fillStyle   = "#fff";
+    ctx.font        = "700 24px system-ui, Arial";
+    ctx.textAlign   = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(selectedName, w / 2, panelY + panelHeight / 2 - 10);
+    ctx.fillText(selectedName, w / 2, nameY);
 
-    ctx.font = "16px system-ui, Arial";
-    ctx.fillStyle = "#bbb";
-    ctx.fillText("Use ◀ ▶ to browse classes", w / 2, panelY + panelHeight - 32);
-
-    const arrowSize = 60;
-    const arrowY = panelY + panelHeight / 2 - arrowSize / 2;
-    const arrowPadding = 12;
+    // --- ARROW BUTTONS (VERTICALLY CENTERED TO PANEL) ---
+    const arrowSize    = 56;
+    const arrowY       = panelY + panelHeight / 2 - arrowSize / 2;
+    const arrowPadding = 8;
 
     buttonRects.push({
       x: panelX - arrowPadding - arrowSize,
@@ -441,6 +638,7 @@
       disabled: false,
       onClick: () => cyclePicker(-1),
     });
+
     buttonRects.push({
       x: panelX + panelWidth + arrowPadding,
       y: arrowY,
@@ -451,9 +649,18 @@
       onClick: () => cyclePicker(1),
     });
 
+    // --- HINT TEXT BELOW PANEL (NO LONGER OVERLAPS SPRITE) ---
+    ctx.font = "16px system-ui, Arial";
+    ctx.fillStyle = "#bbb";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    const hintY = panelY + panelHeight + 10;
+    ctx.fillText("Use ◀ ▶ to browse classes", w / 2, hintY);
+
+    // --- CONFIRM BUTTON BELOW HINT ---
     const confirmWidth = Math.min(w * 0.6, 360);
-    const confirmX = (w - confirmWidth) / 2;
-    const confirmY = panelY + panelHeight + 30;
+    const confirmX     = (w - confirmWidth) / 2;
+    const confirmY     = hintY + 32;
 
     buttonRects.push({
       x: confirmX,
@@ -467,6 +674,7 @@
 
     help.textContent = "Choose your class with the arrows, then confirm.";
   }
+
 
   function layoutWaiting(){
     buttonRects = [];
@@ -518,15 +726,24 @@
     const entry = currentMeta();
     const question = sceneQuestionOverride || (entry && entry.question ? entry.question : "Make your choice");
 
-    // --- Wrapped Question Text ---
+
     const width = canvas.clientWidth || 600;
-    ctx.fillStyle = "#fff";
-    ctx.font = "700 20px system-ui, Arial";
-    ctx.textAlign = "center";
+    const isMobile = width < 700;
+
+    const qMult  = 0.85;                           // shrink factor for mobile
+    const qSize  = 20 * getUiScale(qMult);         // base 20px, scaled on mobile
+    const qLineH = qSize + 6 * getUiScale(qMult);  // line spacing
+
+    ctx.fillStyle   = "#fff";
+    ctx.font        = `700 ${qSize}px system-ui, Arial`;  // <-- now uses qSize
+    ctx.textAlign   = "center";
     ctx.textBaseline = "top";
 
+    // push further down on mobile so it never touches the timer
+    const questionTop = isMobile ? 72 : 40;
+
     // Wrap with 90% width or max 520 px
-    wrapText(question, width/2, 16, Math.min(w * 0.9, 520), 26);
+    wrapText(question, width / 2, questionTop, Math.min(w * 0.9, 520), qLineH);
 
     if (!sceneOptions.length) {
       drawBody("Awaiting instructions for your class…", Math.max(90, h * 0.45));
@@ -549,7 +766,7 @@
 
     sceneOptions.forEach((lab, i) => {
       buttonRects.push({
-        x, y: startY + i*(btnH+gap), w: btnW, h: btnH, label: lab,
+        x, y: startY + i*(btnH+gap), w: btnW, h: btnH, label: lab, mult: 0.6,
         disabled: hasVoted || !eligible || timeUp,
         onClick: () => {
           if (hasVoted || !eligible || timeUp) return;
@@ -582,19 +799,53 @@
   function render(){
     clear();
     if (localStage === "Title") {
+      latestNameEntryRect = null;
       layoutTitle();
     } else if (localStage === "ClassSelect") {
+      latestNameEntryRect = null;
       layoutClassSelect();
     } else if (localStage === "Waiting") {
+      latestNameEntryRect = null;
       if (isVoting(serverScene) && sceneOptions.length) {
         layoutVoting(); drawTimerOverlay();
       } else {
         layoutWaiting();
       }
     } else if (localStage === "EndScene") {
+      latestNameEntryRect = null;
       layoutEndScene();
     }
-    for (const b of buttonRects) drawButton(b.x,b.y,b.w,b.h,b.label,b.disabled);
+    for (const b of buttonRects) drawButton(b.x,b.y,b.w,b.h,b.label,b.disabled,b.mult);
+    updateNameEntryVisibility();
+  }
+
+  function updateNameEntryVisibility(){
+    const show = localStage === "Title";
+    if (!show) {
+      nameEntry.style.display = "none";
+      return;
+    }
+    nameEntry.style.display = "flex";
+    nameInput.disabled = false;
+    if (displayName && nameInput.value !== displayName) {
+      nameInput.value = displayName;
+    }
+    const rect = latestNameEntryRect;
+    if (!rect) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+    const cw = canvas.clientWidth || canvasRect.width;
+    const ch = canvas.clientHeight || canvasRect.height;
+    const scaleX = canvasRect.width / cw;
+    const scaleY = canvasRect.height / ch;
+    const left = canvasRect.left - wrapRect.left + rect.x * scaleX;
+    const top = canvasRect.top - wrapRect.top + rect.y * scaleY;
+    const width = rect.w * scaleX;
+    const height = rect.h * scaleY;
+    nameEntry.style.left = left + "px";
+    nameEntry.style.top = top + "px";
+    nameEntry.style.width = width + "px";
+    nameEntry.style.height = height + "px";
   }
 
   canvas.addEventListener("pointerup", (e) => {
