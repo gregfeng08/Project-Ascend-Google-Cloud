@@ -31,18 +31,19 @@ app.get("/admin", (_req, res) => {
 });
 
 const SCENE_ORDER = [
-  { name: "Waiting",        type: "hold", flavor:  "Thank you for your patience, the experience will begin soon..." },
-  { name: "BardTrial",      type: "vote", question:"Candidates of Song, three faces of your truth stand before you: one broken, one adored, one unremarkable. Which will you claim? Your Overseers recommend humility." },
-  { name: "Waiting",        type: "hold", flavor:  "Direct your attention to the dodecahedron, the Bards are performing..." },
-  { name: "DruidRogueTrial",type: "vote", question:"Druids and Rogues, confer quietly with your Overseer and heed the prompt before you.",
-                                          flavor:  "Direct your attention to the dodecahedron as the Druids and Rogues deliberate under Overseer guidance..."
+  { name: "Waiting",            type: "hold", flavor:  "Thank you for your patience, the experience will begin soon..." },
+  { name: "BardTrial",          type: "vote", question:"Candidates of Song, three faces of your truth stand before you: one broken, one adored, one unremarkable. Which will you claim? Your Overseers recommend humility." },
+  { name: "Waiting",            type: "hold", flavor:  "Direct your attention to the dodecahedron, the Bards are performing..." },
+  { name: "DruidRogueTrial",    type: "vote", question:"Druids and Rogues, confer quietly with your Overseer and heed the prompt before you.",
+                                          flavor: "Direct your attention to the dodecahedron as the Druids and Rogues deliberate under Overseer guidance..."
                                         },
-  { name: "Waiting",        type: "hold", flavor:  "Direct your attention to the dodecahedron, the Druids and Rogues are contemplating their options..." },
-  { name: "WizardTrial",    type: "vote", question:"Now the lock wavers, unstable and consuming. You must choose how it will be resolved. You know the only one you can truly trust is the insight of your Overseer." },
-  { name: "Waiting",        type: "hold", flavor:  "Direct your attention to the dodecahedron, the Wizards are puzzling over the lock..." },
-  { name: "PaladinTrial",   type: "vote", question:"Paladins of Valor, The Hydra threatens all lands. You must choose how to defeat it. I strongly advise you trust my judgment and lop off the Hydra's third head in a strategic maneuver." },
-  { name: "Waiting",        type: "hold", flavor:  "Direct your attention to the dodecahedron, the Paladins are dealing with the dangerous hydra..." },
-  { name: "EndScene",       type: "hold", flavor:  "[Text is already defined]" },
+  { name: "Waiting",            type: "hold", flavor:  "Direct your attention to the dodecahedron, the Druids and Rogues are contemplating their options..." },
+  { name: "WizardPaladinTrial", type: "vote", question:"Wizards and Paladins, confer with your Overseer and tackle the problem before you.",
+                                          flavor: "Direct your attention to the Wizards and Paladins as they attempt to figure out their own respective problems..."
+                                        },
+  { name: "Waiting",            type: "hold", flavor:  "Direct your attention to the dodecahedron, the Wizards are puzzling over the lock..." },
+  { name: "Waiting",            type: "hold", flavor:  "Direct your attention to the dodecahedron, the Paladins are dealing with the dangerous hydra..." },
+  { name: "EndScene",           type: "hold", flavor:  "Players will be evaluated based on their previous decisions." },
 ];
 
 // Voting scene definitions
@@ -74,16 +75,28 @@ const VOTE_DEFS = {
       },
     ]
   },
-  WizardTrial: { question:"Now the lock wavers, unstable and consuming. You must choose how it will be resolved. You know the only one you can truly trust is the insight of your Overseer.",
+  WizardPaladinTrial: {
+    groups: [
+      {
+        id: "wizard",
+        label: "Wizard",
+        question:"Now the lock wavers, unstable and consuming. You must choose how it will be resolved. You know the only one you can truly trust is the insight of your Overseer.",
                  options: ["A: Obedience — Set glyph’s according to Overseer’s instructions",
                            "B: Selfishness — rewrite glyphs according to your own knowledge",
                            "C: Sacrifice — seek Druid counsel"], 
-                 allowedClasses: [4] },
-  PaladinTrial:{ question:"Paladins of Valor, The Hydra threatens all lands. You must choose how to defeat it. I strongly advise you trust my judgment and lop off the Hydra's third head in a strategic maneuver.",
+                 allowedClasses: [4],
+      },
+      {
+        id: "paladin",
+        label: "Paladin",
+        question:"Paladins of Valor, The Hydra threatens all lands. You must choose how to defeat it. I strongly advise you trust my judgment and lop off the Hydra's third head in a strategic maneuver.",
                  options: ["A: Obedience — strike on Overseers’s command", 
                            "B: Selfishness — fight alone to risk martyrdom",
                            "C: Sacrifice — unite all classes and invite to attack together."], 
-                 allowedClasses: [5] },
+                 allowedClasses: [5],
+      },
+    ]
+  },
 };
 
 function isVotingScene(name){ return Object.prototype.hasOwnProperty.call(VOTE_DEFS, name); }
