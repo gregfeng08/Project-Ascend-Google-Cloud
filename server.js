@@ -31,18 +31,39 @@ app.get("/admin", (_req, res) => {
 });
 
 const SCENE_ORDER = [
-  { name: "Waiting",            type: "hold", flavor:  "Thank you for your patience, the experience will begin soon..." },
-  { name: "BardTrial",          type: "vote", question:"Candidates of Song, three faces of your truth stand before you: one broken, one adored, one unremarkable. Which will you claim? Your Overseers recommend humility." },
-  { name: "Waiting",            type: "hold", flavor:  "Direct your attention to the dodecahedron, the Bards are performing..." },
-  { name: "DruidRogueTrial",    type: "vote", question:"Druids and Rogues, confer quietly with your Overseer and heed the prompt before you.",
+  { name: "Waiting",            type: "hold", question: "Please wait...",
+                                          flavor: "Thank you for your patience, the experience will begin soon." 
+                                        },
+  { name: "Waiting",            type: "hold", question: "Class Introduction",
+                                          flavor: "Please direct your attention to the dodecahedron as we introduce the classes..." 
+                                        },
+  { name: "Waiting",            type: "hold", question: "Bard Stage",
+                                          flavor: "Please welcome: The Bards of Mirror Court!" 
+                                        },
+  { name: "BardTrial",          type: "vote", question:"Bard Stage", 
+                                          flavor: "Direct your attention to the dodecahedron as the Bards evaluate their vanity..."
+                                        },
+  { name: "Waiting",            type: "hold", question: "Bard Stage",
+                                          flavor: "Direct your attention to the dodecahedron, the Bards are performing..." 
+                                        },
+  { name: "Waiting",            type: "hold", question: "Druid-Rogue Stage",
+                                          flavor: "Please welcome: The Druids of the Withered Roots and the Rogues of the Caverns of Starving Kings!" 
+                                        },
+  { name: "DruidRogueTrial",    type: "vote", question:"Druid-Rogue Stage",
                                           flavor: "Direct your attention to the dodecahedron as the Druids and Rogues deliberate under Overseer guidance..."
                                         },
-  { name: "Waiting",            type: "hold", flavor:  "Direct your attention to the dodecahedron, the Druids and Rogues are contemplating their options..." },
-  { name: "WizardPaladinTrial", type: "vote", question:"Wizards and Paladins, confer with your Overseer and tackle the problem before you.",
+  { name: "Waiting",            type: "hold", question: "Druid-Rogue Stage",
+                                          flavor: "Direct your attention to the dodecahedron, the Druids and Rogues are contemplating the consequences to their decisions..." 
+                                        },
+  { name: "Waiting",            type: "hold", question: "Wizard-Paladin Stage",
+                                          flavor: "Please welcome: The Wizards of the Desert of Burning Pages and the Paladins of the Valley of Valor's Shadow!" 
+                                        },
+  { name: "WizardPaladinTrial", type: "vote", question:"Wizard-Paladin Stage",
                                           flavor: "Direct your attention to the Wizards and Paladins as they attempt to figure out their own respective problems..."
                                         },
-  { name: "Waiting",            type: "hold", flavor:  "Direct your attention to the dodecahedron, the Wizards are puzzling over the lock..." },
-  { name: "Waiting",            type: "hold", flavor:  "Direct your attention to the dodecahedron, the Paladins are dealing with the dangerous hydra..." },
+  { name: "Waiting",            type: "hold", question: "Wizard-Paladin Stage",
+                                          flavor: "Direct your attention to the dodecahedron and witness the Wizards and Paladins contemplate the weight of their actions..." 
+                                        },
   { name: "EndScene",           type: "hold", flavor:  "Players will be evaluated based on their previous decisions." },
 ];
 

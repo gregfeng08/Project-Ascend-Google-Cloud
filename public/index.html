@@ -616,16 +616,21 @@
     const s = size * getUiScale(mult);
     ctx.fillStyle = "#fff";
     ctx.font = `700 ${s}px system-ui, Arial`;
-    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
 
-    // outline
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = "black";
+    ctx.save();
+    ctx.lineWidth = 2.5;          // was 4
+    ctx.lineJoin = "round";       // smooth corners
+    ctx.miterLimit = 2;           // prevents long spikes
+    ctx.strokeStyle = "rgba(0,0,0,0.7)";
     ctx.strokeText(text, w/2, y);
+    ctx.restore();
 
     ctx.fillStyle = "#fff";
     ctx.fillText(text, w/2, y);
   }
+
   function drawBody(text, y, size = 16, mult = 1.0){
     const w = canvas.clientWidth || 600;
     const s = size * getUiScale(mult);
@@ -645,11 +650,14 @@
       const test = line ? (line + " " + words[n]) : words[n];
       if (ctx.measureText(test).width > maxW && n > 0){
         // outline
-        ctx.lineWidth = 4;
-        ctx.strokeStyle = "black";
+        ctx.save();
+        ctx.lineWidth = 2;
+        ctx.lineJoin = "round";
+        ctx.miterLimit = 2;
+        ctx.strokeStyle = "rgba(0,0,0,0.7)";
         ctx.strokeText(line, w/2, yy);
+        ctx.restore();
 
-        // fill
         ctx.fillStyle = "#fff";
         ctx.fillText(line, w/2, yy);
 
@@ -659,9 +667,13 @@
     }
 
     // final line
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = "black";
+    ctx.save();
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
+    ctx.strokeStyle = "rgba(0,0,0,0.7)";
     ctx.strokeText(line, w/2, yy);
+    ctx.restore();
 
     ctx.fillStyle = "#fff";
     ctx.fillText(line, w/2, yy);
@@ -936,9 +948,11 @@
 
     // Flavor per Waiting index
     const entry = currentMeta();
-    const flavor = entry && entry.flavor ? entry.flavor : "Please wait…";
+    const flavor = entry && entry.flavor ? entry.flavor : "Please wait...";
 
-    drawHeader("Please wait…", Math.max(16, h*0.2), 26);
+    const header = entry && entry.question ? entry.question : "Please wait...";
+
+    drawHeader(header, Math.max(16, h*0.2), 26);
     drawBody(flavor, Math.max(60, h*0.2 + 34));
     help.textContent = "Waiting for the host to start.";
   }
