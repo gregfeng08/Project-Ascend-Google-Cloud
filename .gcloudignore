@@ -1,0 +1,10 @@
+# Ignore node_modules except when needed
+node_modules/
+
+# Ignore local logs / junk
+npm-debug.log
+yarn-error.log
+.DS_Store
+
+# DO NOT ignore public — required for assets
+!.gitignore

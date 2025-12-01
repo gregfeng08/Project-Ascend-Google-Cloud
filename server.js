@@ -24,10 +24,69 @@ const CLASS_NAMES = {
 
 const MAX_PER_CLASS = 16;
 
+const fs = require("fs");
+const publicPath = path.join(__dirname, "public");
+
+app.get("/Animations/:file", (req, res) => {
+  const fileName = req.params.file;
+
+  // Simple safety: only allow .gif
+  if (!/\.gif$/i.test(fileName)) {
+    return res.status(400).send("Only GIFs allowed");
+  }
+
+  const fullPath = path.join(publicPath, "Animations", fileName);
+
+  // Stream the file instead of using sendFile
+  const stream = fs.createReadStream(fullPath);
+
+  stream.on("error", (err) => {
+    console.error("Error streaming animation:", fullPath, err);
+    if (!res.headersSent) {
+      res.status(500).send("Error streaming animation");
+    }
+  });
+
+  // Tell the browser it's a GIF
+  res.type("gif");
+  stream.pipe(res);
+});
+
 // Static
 app.use(express.static("public"));
 app.get("/admin", (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin.html"));
+});
+
+// ---------- DEBUG 1: does the GIF exist at all? ----------
+app.get("/debug/gif-exists", (req, res) => {
+  const p = path.join(publicPath, "Animations", "GlitchDice.gif"); // or Animations if you prefer
+  const exists = fs.existsSync(p);
+  res.json({ path: p, exists });
+});
+
+// ---------- DEBUG 2: list everything in Images/UI ----------
+app.get("/debug/list-ui", (req, res) => {
+  const dir = path.join(publicPath, "Animations");
+  fs.readdir(dir, (err, files) => {
+    res.json({
+      dir,
+      error: err ? err.message : null,
+      files: files || []
+    });
+  });
+});
+
+// ---------- DEBUG 3: try sending the GIF manually ----------
+app.get("/debug/gif-test", (req, res) => {
+  const p = path.join(publicPath, "Animations","GlitchDice.gif");
+  fs.access(p, fs.constants.R_OK, (err) => {
+    if (err) {
+      console.error("Cannot read GIF:", err);
+      return res.status(500).send("Cannot read GIF: " + err.message);
+    }
+    res.sendFile(p);
+  });
 });
 
 const SCENE_ORDER = [
@@ -58,6 +117,9 @@ const SCENE_ORDER = [
   { name: "Waiting",            type: "hold", question: "Wizard-Paladin Stage",
                                           flavor: "Please welcome: The Wizards of the Desert of Burning Pages and the Paladins of the Valley of Valor's Shadow!" 
                                         },
+  { name: "Waiting",            type: "hold", question: "Wizard-Paladin Stage",
+                                          flavor: "Paladins of the Valley of Valor's Shadow, you must roll a Strength check to see if you are strong enough to remove the enchanted sword from the desert rock before the Hydra attacks those around you." 
+                                        },
   { name: "WizardPaladinTrial", type: "vote", question:"Wizard-Paladin Stage",
                                           flavor: "Direct your attention to the Wizards and Paladins as they attempt to figure out their own respective problems..."
                                         },
@@ -66,6 +128,14 @@ const SCENE_ORDER = [
                                         },
   { name: "EndScene",           type: "hold", flavor:  "Players will be evaluated based on their previous decisions." },
 ];
+
+//Hashmap of Class to Gif to use
+const DICE_SCENES = {
+  4: [{1:1}],      // scene index 4 (Bard Stage hold) -> Bard rolls
+  7: [{2:2}, {3:3}],   // scene index 7 (Druid-Rogue hold) -> Druid + Rogue roll
+  9: [{5:4}],
+  11: [{4:5}, {5:6}],  // scene index 11 (Wizard-Paladin hold) -> Wizard + Paladin roll
+};
 
 // Voting scene definitions
 const VOTE_DEFS = {
@@ -269,8 +339,18 @@ function applyStateIndex(newIdx) {
 
   if (state !== prevName && isVotingScene(state)) voteManager.clearVoted(state);
 
-  emitToJoinedAndAdmins("state", { state, index: stateIdx });
-  if (isVotingScene(state)) emitToJoinedAndAdmins("sceneData", voteManager.getSceneData(state));
+  // NEW: find dice classes for this scene index, if any
+  const diceClasses = DICE_SCENES[stateIdx] || null;
+
+  emitToJoinedAndAdmins("state", { 
+    state, 
+    index: stateIdx,
+    diceClasses,     // <--- added
+  });
+
+  if (isVotingScene(state)) {
+    emitToJoinedAndAdmins("sceneData", voteManager.getSceneData(state));
+  }
 
   if (!isVotingScene(state)) stopRoundTimer(); else broadcastTimer();
 }
@@ -306,35 +386,6 @@ app.get("/clients", (_req, res) => {
   res.json({
     total_joined: total,
     per_class: perClassNamed
-  });
-});
-
-// -------- API: Winner of the current vote --------
-app.get("/winner", (_req, res) => {
-  // If current scene is not a voting scene, respond accordingly
-  if (!isVotingScene(state)) {
-    return res.json({
-      scene: state,
-      vote_winner: null
-    });
-  }
-
-  // Get the voting data for this scene
-  const data = voteManager.getSceneData(state);
-  if (!data) {
-    return res.json({
-      scene: state,
-      vote_winner: null
-    });
-  }
-
-  // Compute max count and all leaders
-  const counts = data.counts;
-  const leader = (counts.map((v,i)=>({v,i})).filter(x=>x.v===max).map(x=>options[x.i]))[0];
-
-  res.json({
-    scene: state,
-    vote_winner: leaders
   });
 });
 

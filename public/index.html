@@ -4,9 +4,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="stylesheet" href="https://use.typekit.net/ake2rry.css">
 <style>
-  :root { color-scheme: light dark; }
+  :root {
+    color-scheme: light dark;
+  }
 
-  html, body { height: 100%; margin: 0; }
+  html,
+  body {
+    height: 100%;
+    margin: 0;
+  }
 
   /* Desktop / tablet: center everything */
   body {
@@ -23,12 +29,16 @@
 
   /* Mobile: turn off flex-centering, allow scroll */
   @media (max-width: 700px) {
-    html, body {
-      height: auto;  /* stop forcing 100% viewport height */
+
+    html,
+    body {
+      height: auto;
+      /* stop forcing 100% viewport height */
     }
 
     body {
-      display: block;  /* no flex-centering on mobile */
+      display: block;
+      /* no flex-centering on mobile */
       padding: env(safe-area-inset-top) 8px env(safe-area-inset-bottom);
     }
 
@@ -39,30 +49,70 @@
     }
   }
 
-  #wrap { width: 100%; max-width: 900px; text-align: center; position: relative; }
-  canvas { background:#1e1e1e; border:1px solid #333; border-radius:12px; touch-action: manipulation; }
+  #wrap {
+    width: 100%;
+    max-width: 900px;
+    text-align: center;
+    position: relative;
+  }
+
+  canvas {
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 12px;
+    touch-action: manipulation;
+  }
+
   /* Connection indicator */
   #connStatus {
     position: absolute;
-    top: 8px; right: 12px;
-    display: flex; align-items: center; gap: 6px;
-    font-size: 14px; opacity: .9;
+    top: 8px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    opacity: .9;
     user-select: none;
   }
+
   #connDot {
-    width: 12px; height: 12px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
     background-color: red;
-    box-shadow: 0 0 4px rgba(0,0,0,.5);
+    box-shadow: 0 0 4px rgba(0, 0, 0, .5);
   }
-  @keyframes pulseRed {
-    0%   { background-color: #900; transform: scale(1);   box-shadow: 0 0 6px #f00; }
-    50%  { background-color: #f00; transform: scale(1.3); box-shadow: 0 0 10px #f55; }
-    100% { background-color: #900; transform: scale(1);   box-shadow: 0 0 6px #f00; }
-  }
-  .pulse { animation: pulseRed 1.2s infinite ease-in-out; }
 
-  .hint { opacity:.85; font-size:14px; margin-top:8px; }
+  @keyframes pulseRed {
+    0% {
+      background-color: #900;
+      transform: scale(1);
+      box-shadow: 0 0 6px #f00;
+    }
+
+    50% {
+      background-color: #f00;
+      transform: scale(1.3);
+      box-shadow: 0 0 10px #f55;
+    }
+
+    100% {
+      background-color: #900;
+      transform: scale(1);
+      box-shadow: 0 0 6px #f00;
+    }
+  }
+
+  .pulse {
+    animation: pulseRed 1.2s infinite ease-in-out;
+  }
+
+  .hint {
+    opacity: .85;
+    font-size: 14px;
+    margin-top: 8px;
+  }
 
   #nameEntry {
     position: absolute;
@@ -72,6 +122,7 @@
     padding: 0;
     z-index: 5;
   }
+
   #nameEntry input {
     text-align: center;
     flex: 1;
@@ -85,8 +136,55 @@
     height: 100%;
     box-sizing: border-box;
   }
+
   #nameEntry button {
     display: none;
+  }
+
+  /* Dice overlay */
+  #diceOverlay {
+    position: absolute;
+    display: none;
+    z-index: 4;
+    pointer-events: none;
+  }
+
+  #diceOverlayInner {
+    display: flex;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  #diceOverlay.double #diceOverlayInner {
+    flex-direction: row;
+  }
+
+  #diceOverlay.single #diceOverlayInner {
+    flex-direction: column;
+  }
+
+  .dice-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 0 0 auto;
+  }
+
+  .dice-label {
+    font-size: 14px;
+    margin-bottom: 6px;
+    opacity: 0.9;
+  }
+
+  .dice-card img {
+    display:block;
+    border-radius: 12px;
+    image-rendering: auto;
   }
 </style>
 
@@ -98,17 +196,24 @@
   <p>Server scene: <strong id="serverScene">Waiting</strong></p>
   <p>Your class: <strong id="classEl">not selected</strong></p>
   <canvas id="canvas" width="600" height="400"></canvas>
+
   <div id="nameEntry">
     <input id="nameInput" type="text" maxlength="40" placeholder="Enter your name" autocomplete="off" />
     <button id="nameSave">Save Name</button>
   </div>
+
+  <!-- Dice overlay (dice GIFs + labels go here) -->
+  <div id="diceOverlay">
+    <div id="diceOverlayInner"></div>
+  </div>
+
   <p id="help" class="hint">Enter your name, then choose a class to join.</p>
   <p id="status" style="opacity:.7;margin-top:10px;">&nbsp;</p>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-  const connDot  = document.getElementById("connDot");
+  const connDot = document.getElementById("connDot");
   const connText = document.getElementById("connText");
   const statusEl = document.getElementById("status");
   const serverSceneEl = document.getElementById("serverScene");
@@ -117,7 +222,10 @@
   const help = document.getElementById("help");
   const nameEntry = document.getElementById("nameEntry");
   const nameInput = document.getElementById("nameInput");
-  
+
+  // Dice overlay DOM
+  const diceOverlay = document.getElementById("diceOverlay");
+  const diceOverlayInner = document.getElementById("diceOverlayInner");
 
   // ----- localStorage keys + helpers -----
   const STORAGE_KEYS = {
@@ -136,6 +244,8 @@
   let nameInputFocused = false;
   let keyboardOpen = false;
   let baselineVH = null;   // "normal" viewport height (no keyboard)
+
+  let diceClassesForScene = null;
 
   function loadPersistedState() {
     // name
@@ -183,6 +293,26 @@
     render();          // re-layout title back to original spot
   });
 
+  // Image assets (paths relative to /public)
+  const IMG_BACKGROUND_FOREST = "Images/Backgrounds/updatedforest(big).png";
+  const IMG_BARD_STATIC = "Images/Characters/Large_BardStatic.png";
+  const IMG_DRUID_STATIC = "Images/Characters/Large_DruidStatic.png";
+  const IMG_ROGUE_STATIC = "Images/Characters/Large_RogueStatic.png";
+  const IMG_WIZARD_STATIC = "Images/Characters/Large_WizardStatic.png";
+  const IMG_PALADIN_STATIC = "Images/Characters/Large_PaladinStatic.png";
+  const IMG_ARROW_LEFT = "Images/UI/Large_ArrowUI.png";
+  const IMG_ARROW_RIGHT = "Images/UI/Large_ArrowUI2.png";
+  const IMG_BANNER = "Images/UI/Large_BannerUI.png";
+  const IMG_FRAME_SELECT = "Images/UI/Large_SelectUI.png";
+  const IMG_SELECT_HOVER = "Images/UI/Large_SelectHover.png";
+  const IMG_BUTTON_LONG = "Images/UI/Large_LongUI.png";
+  const IMG_OPTION_CARD = "Images/UI/Large_Optionui.png";
+  const IMG_BACKGROUND_PANEL = "Images/UI/Large_BKGui.png";
+  const IMG_STAT_PANEL = "Images/UI/Large_StatUI.png";
+
+  // Palantell logo (update path if needed)
+  const IMG_LOGO = "Images/UI/palantell-logo.png";
+
   const CLASS_NAMES = {
     1: "Bard",
     2: "Druid",
@@ -190,7 +320,19 @@
     4: "Wizard",
     5: "Paladin",
   };
-  const CLASS_ORDER = [1,2,3,4,5];
+  const CLASS_ORDER = [1, 2, 3, 4, 5];
+
+  // Dice GIFs per class (update paths as needed)
+  const DICE_GIF_BY_CLASS = {
+    1: "Animations/BardDice-9.gif",
+    2: "Animations/DruidDice-5.gif",
+    3: "Animations/RogueDice-8.gif",
+    4: "Animations/PaladinDice-12.gif",
+    5: "Animations/WizardDice-2.gif",
+    6: "Animations/GlitchDice.gif",
+  };
+
+  const DICE_SIZE_MULT = 1.3;
 
   // ----- class capacity UI -----
   const MAX_PER_CLASS = 16;
@@ -231,22 +373,14 @@
   setInterval(fetchClassCounts, 2000);
   fetchClassCounts();
 
-  // Image assets (paths relative to /public)
-  const IMG_BACKGROUND_FOREST   = "Images/Backgrounds/updatedforest(big).png";
-  const IMG_BARD_STATIC         = "Images/Characters/Large_BardStatic.png";
-  const IMG_DRUID_STATIC        = "Images/Characters/Large_DruidStatic.png";
-  const IMG_ROGUE_STATIC        = "Images/Characters/Large_RogueStatic.png";
-  const IMG_WIZARD_STATIC       = "Images/Characters/Large_WizardStatic.png";
-  const IMG_PALADIN_STATIC      = "Images/Characters/Large_PaladinStatic.png";
-  const IMG_ARROW_LEFT          = "Images/UI/Large_ArrowUI.png";
-  const IMG_ARROW_RIGHT         = "Images/UI/Large_ArrowUI2.png";
-  const IMG_BANNER              = "Images/UI/Large_BannerUI.png";
-  const IMG_FRAME_SELECT        = "Images/UI/Large_SelectUI.png";
-  const IMG_SELECT_HOVER        = "Images/UI/Large_SelectHover.png";
-  const IMG_BUTTON_LONG         = "Images/UI/Large_LongUI.png";
-  const IMG_OPTION_CARD         = "Images/UI/Large_Optionui.png";
-  const IMG_BACKGROUND_PANEL    = "Images/UI/Large_BKGui.png";
-  const IMG_STAT_PANEL          = "Images/UI/Large_StatUI.png";
+  const logoImg = new Image();
+  logoImg.onload = () => {
+    // Once loaded, redraw if we're on the title screen
+    if (localStage === "Title") {
+      render();
+    }
+  };
+  logoImg.src = IMG_LOGO;
 
   const CLASS_IMAGES = {
     1: IMG_BARD_STATIC,
@@ -264,7 +398,7 @@
     classImageCache[id] = img;
   }
 
-  var internalCtr = {obedience:0,selfishness:0,sacrifice:0};
+  var internalCtr = { obedience: 0, selfishness: 0, sacrifice: 0 };
 
   const socket = io();
   socket.emit("identify", { role: "client" });
@@ -275,7 +409,7 @@
       localStorage.removeItem("class");
       localStorage.removeItem("selections");
 
-      internalCtr = {obedience:0,selfishness:0,sacrifice:0};
+      internalCtr = { obedience: 0, selfishness: 0, sacrifice: 0 };
     } catch (e) {
       console.warn("Failed to clear localStorage", e);
     }
@@ -295,10 +429,6 @@
     }
     if (autoJoinFromStorage && userClass) {
       socket.emit("setClass", { classId: userClass });
-      // your existing "classSet" handler will then:
-      // - set localStage = "Waiting"
-      // - emit joinAfterClass
-      // - applySceneDataForUser + render()
     }
   });
   socket.on("disconnect", () => {
@@ -327,9 +457,13 @@
   let sceneQuestionOverride = null;
   let classPickerIndex = 0;
 
+  // Info about the last voting scene we left
+  // { scene, classes:[classIds], afterScene }
+  let lastVoteInfo = null;
+
   // Timer
   let timerRemainingMs = 0;
-  let timerDurationMs  = 30_000;
+  let timerDurationMs = 30_000;
 
   // Receive scenes (with meta)
   socket.on("scenes", ({ scenes }) => {
@@ -338,7 +472,7 @@
 
   let pendingClassSelect = false;
 
-  function submitNameEntry({ requestClassSelect = false } = {}){
+  function submitNameEntry({ requestClassSelect = false } = {}) {
     if (localStage !== "Title") return;
     const val = (nameInput.value || "").trim();
     if (!val) {
@@ -367,6 +501,7 @@
       }
     }
   });
+
   // Class select
   socket.on("classSet", ({ classId }) => {
     userClass = classId;
@@ -383,12 +518,34 @@
     applySceneDataForUser();
     render();
   });
+
   // State updates (include index so we can read flavor/question)
-  socket.on("state", ({ state, index }) => {
+  socket.on("state", ({ state, index, diceClasses }) => {
     const prevScene = serverScene;
-    serverScene = state; 
+    const prevWasVoting = isVoting(prevScene);
+    const prevAllowed = copyList(allowedClasses);
+
+    serverScene = state;
     serverIndex = Number.isInteger(index) ? index : serverIndex;
     serverSceneEl.textContent = state;
+
+    // NEW: store dice info for this scene (or clear it)
+    diceClassesForScene = Array.isArray(diceClasses) ? diceClasses.slice(0, 2) : null;
+
+    const nowIsVoting = isVoting(serverScene);
+
+    // (you can keep or delete this whole "lastVoteInfo" logic if you want; 
+    // once you switch to explicit dice scenes, you don't need it anymore)
+    if (prevWasVoting && !nowIsVoting) {
+      lastVoteInfo = {
+        scene: prevScene,
+        classes: prevAllowed,
+        afterScene: serverScene,
+      };
+    }
+    if (nowIsVoting) {
+      lastVoteInfo = null;
+    }
 
     if (state === "EndScene") {
       localStage = "EndScene";
@@ -415,22 +572,23 @@
     render();
   });
 
-  function copyList(list){ return Array.isArray(list) ? list.slice() : []; }
-  function findGroupForUser(data){
+  function copyList(list) { return Array.isArray(list) ? list.slice() : []; }
+
+  function findGroupForUser(data) {
     if (!data || !Array.isArray(data.groups) || !userClass) return null;
     return data.groups.find(g => Array.isArray(g.allowedClasses) && g.allowedClasses.includes(userClass)) || null;
   }
-  function currentPickerClass(){
+  function currentPickerClass() {
     return CLASS_ORDER[classPickerIndex] || CLASS_ORDER[0];
   }
-  function syncPickerToUser(){
+  function syncPickerToUser() {
     if (userClass && CLASS_ORDER.includes(userClass)) {
       classPickerIndex = CLASS_ORDER.indexOf(userClass);
     } else if (classPickerIndex < 0 || classPickerIndex >= CLASS_ORDER.length) {
       classPickerIndex = 0;
     }
   }
-  function applySceneDataForUser(){
+  function applySceneDataForUser() {
     if (!currentSceneData || currentSceneData.name !== serverScene) return;
     if (currentSceneData.multi) {
       const group = findGroupForUser(currentSceneData);
@@ -472,7 +630,6 @@
     help.textContent = `${name} is full (${max} participants). Please choose another class.`;
   });
 
-
   socket.on("notEligible", ({ scene, required }) => {
     if (scene === serverScene) {
       const pretty = required.map(c => CLASS_NAMES[c] || c).join(", ");
@@ -481,16 +638,14 @@
     }
   });
 
-  function isVoting(name){
-    return name !== "Waiting" && name !== "EndScene";
-  }
+  function isVoting(name) { return name !== "Waiting" && name !== "EndScene"; }
 
   // Canvas + layout
   const canvas = document.getElementById("canvas");
   const ctx = canvas.getContext("2d");
-  const ASPECT = 3/2;
+  const ASPECT = 3 / 2;
 
-  function getViewportSize(){
+  function getViewportSize() {
     const vv = window.visualViewport;
     return { vw: vv ? vv.width : innerWidth, vh: vv ? vv.height : innerHeight };
   }
@@ -529,47 +684,45 @@
       }
     }
 
-    canvas.style.width  = cssW + "px";
+    canvas.style.width = cssW + "px";
     canvas.style.height = cssH + "px";
 
     fitForDPR();
     render();
+    updateDiceOverlayPosition();
   }
 
-  function fitForDPR(){
+  function fitForDPR() {
     const dpr = devicePixelRatio || 1;
     const cssW = canvas.clientWidth || canvas.width;
     const cssH = canvas.clientHeight || canvas.height;
-    canvas.width  = Math.round(cssW * dpr);
+    canvas.width = Math.round(cssW * dpr);
     canvas.height = Math.round(cssH * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   function getUiScale(mult = 1.0) {
     const w = canvas.clientWidth || window.innerWidth;
-
     const isMobile = w < 700;
-
     if (!isMobile) return 1.0;
-
     return mult;
   }
 
   let rafReq = null;
-  function scheduleResize(){
+  function scheduleResize() {
     if (rafReq) return;
     rafReq = requestAnimationFrame(() => { rafReq = null; resizeCanvasToViewport(); });
   }
-  addEventListener("resize", scheduleResize, { passive:true });
-  if (visualViewport){
-    visualViewport.addEventListener("resize", scheduleResize, { passive:true });
-    visualViewport.addEventListener("scroll", scheduleResize, { passive:true });
+  addEventListener("resize", scheduleResize, { passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", scheduleResize, { passive: true });
+    window.visualViewport.addEventListener("scroll", scheduleResize, { passive: true });
   }
 
   // Drawing helpers
-  function clear(){
+  function clear() {
     const w = canvas.clientWidth || 600, h = canvas.clientHeight || 400;
-    ctx.clearRect(0,0,w,h);
-    ctx.fillStyle = "#1e1e1e"; ctx.fillRect(0,0,w,h);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#1e1e1e"; ctx.fillRect(0, 0, w, h);
   }
   function drawButton(x, y, w, h, label, disabled, mult = 1.0) {
     const r = 12;
@@ -586,23 +739,21 @@
     ctx.fill();
 
     // --- dynamic text size ---
-    const baseSize = 18 * getUiScale(mult);       // starting size
-    const minSize  = 10 * getUiScale(mult);       // don't go smaller than this
-    const paddingX = 16;                          // left/right padding inside button
+    const baseSize = 18 * getUiScale(mult);
+    const minSize = 10 * getUiScale(mult);
+    const paddingX = 16;
 
     let fontSize = baseSize;
 
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
-    // Set initial font and measure
     ctx.font = `600 ${fontSize}px system-ui, Arial`;
     const maxTextWidth = w - paddingX;
     let metrics = ctx.measureText(label);
 
-    // If it's too wide, shrink proportionally
     if (metrics.width > maxTextWidth) {
-      const scale = maxTextWidth / metrics.width; // how much to shrink
+      const scale = maxTextWidth / metrics.width;
       fontSize = Math.max(minSize, fontSize * scale);
       ctx.font = `600 ${fontSize}px system-ui, Arial`;
     }
@@ -611,7 +762,7 @@
     ctx.fillText(label, x + w / 2, y + h / 2);
   }
 
-  function drawHeader(text, y, size=22, mult=1.0){
+  function drawHeader(text, y, size = 22, mult = 1.0) {
     const w = canvas.clientWidth || 600;
     const s = size * getUiScale(mult);
     ctx.fillStyle = "#fff";
@@ -620,18 +771,18 @@
     ctx.textBaseline = "top";
 
     ctx.save();
-    ctx.lineWidth = 2.5;          // was 4
-    ctx.lineJoin = "round";       // smooth corners
-    ctx.miterLimit = 2;           // prevents long spikes
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
     ctx.strokeStyle = "rgba(0,0,0,0.7)";
-    ctx.strokeText(text, w/2, y);
+    ctx.strokeText(text, w / 2, y);
     ctx.restore();
 
     ctx.fillStyle = "#fff";
-    ctx.fillText(text, w/2, y);
+    ctx.fillText(text, w / 2, y);
   }
 
-  function drawBody(text, y, size = 16, mult = 1.0){
+  function drawBody(text, y, size = 16, mult = 1.0) {
     const w = canvas.clientWidth || 600;
     const s = size * getUiScale(mult);
     const lineH = s + 6 * getUiScale(mult);
@@ -640,53 +791,50 @@
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
 
-    // For wrapping, stroke each line manually
     const words = String(text).split(/\s+/);
     let line = "";
     let yy = y;
     const maxW = Math.min(w * 0.9, 560);
 
-    for (let n = 0; n < words.length; n++){
+    for (let n = 0; n < words.length; n++) {
       const test = line ? (line + " " + words[n]) : words[n];
-      if (ctx.measureText(test).width > maxW && n > 0){
-        // outline
+      if (ctx.measureText(test).width > maxW && n > 0) {
         ctx.save();
         ctx.lineWidth = 2;
         ctx.lineJoin = "round";
         ctx.miterLimit = 2;
         ctx.strokeStyle = "rgba(0,0,0,0.7)";
-        ctx.strokeText(line, w/2, yy);
+        ctx.strokeText(line, w / 2, yy);
         ctx.restore();
 
         ctx.fillStyle = "#fff";
-        ctx.fillText(line, w/2, yy);
+        ctx.fillText(line, w / 2, yy);
 
         line = words[n];
         yy += lineH;
       } else line = test;
     }
 
-    // final line
     ctx.save();
     ctx.lineWidth = 2;
     ctx.lineJoin = "round";
     ctx.miterLimit = 2;
     ctx.strokeStyle = "rgba(0,0,0,0.7)";
-    ctx.strokeText(line, w/2, yy);
+    ctx.strokeText(line, w / 2, yy);
     ctx.restore();
 
     ctx.fillStyle = "#fff";
-    ctx.fillText(line, w/2, yy);
+    ctx.fillText(line, w / 2, yy);
   }
 
-  function wrapText(text, x, y, maxW, lineH){
+  function wrapText(text, x, y, maxW, lineH) {
     if (!text) return;
     const words = String(text).split(/\s+/);
     let line = "", yy = y;
-    for (let n=0; n<words.length; n++){
+    for (let n = 0; n < words.length; n++) {
       const test = line ? (line + " " + words[n]) : words[n];
       const w = ctx.measureText(test).width;
-      if (w > maxW && n > 0){
+      if (w > maxW && n > 0) {
         ctx.fillText(line, x, yy);
         line = words[n]; yy += lineH;
       } else {
@@ -694,15 +842,17 @@
       }
     }
     ctx.fillText(line, x, yy);
+    return yy + lineH;
   }
-  function cyclePicker(delta){
+
+  function cyclePicker(delta) {
     const len = CLASS_ORDER.length;
     if (!len) return;
     classPickerIndex = (classPickerIndex + delta + len) % len;
     render();
   }
-  function fmtSeconds(ms){ const s = Math.ceil(ms / 1000); return Math.max(0, s).toString(); }
-  function drawTimerOverlay(){
+  function fmtSeconds(ms) { const s = Math.ceil(ms / 1000); return Math.max(0, s).toString(); }
+  function drawTimerOverlay() {
     if (!isVoting(serverScene)) return;
     const w = canvas.clientWidth || 600;
     const pad = 16;
@@ -713,11 +863,11 @@
     const x = w - pad - tw, y = pad, r = 10;
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     ctx.beginPath();
-    ctx.moveTo(x+r,y);
-    ctx.lineTo(x+tw-r,y); ctx.quadraticCurveTo(x+tw,y,x+tw,y+r);
-    ctx.lineTo(x+tw,y+th-r); ctx.quadraticCurveTo(x+tw,y+th,x+tw-r,y+th);
-    ctx.lineTo(x+r,y+th); ctx.quadraticCurveTo(x,y+th,x,y+th-r);
-    ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + tw - r, y); ctx.quadraticCurveTo(x + tw, y, x + tw, y + r);
+    ctx.lineTo(x + tw, y + th - r); ctx.quadraticCurveTo(x + tw, y + th, x + tw - r, y + th);
+    ctx.lineTo(x + r, y + th); ctx.quadraticCurveTo(x, y + th, x, y + th - r);
+    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
     ctx.closePath(); ctx.fill();
     ctx.fillStyle = "#fff";
     ctx.textAlign = "right"; ctx.textBaseline = "top";
@@ -727,47 +877,92 @@
   let buttonRects = [];
   let latestNameEntryRect = null;
 
-  function currentMeta(){
+  function currentMeta() {
     return sceneList.find(s => s.index === serverIndex) || null;
   }
 
-  function layoutTitle(){
+  const TITLE_OFFSET_Y=30;
+
+  function layoutTitle() {
     buttonRects = [];
     const w = canvas.clientWidth || 600;
     const h = canvas.clientHeight || 400;
 
-    drawHeader("Welcome to Project: Ascend", 56, 26);
+    // Global offset for entire title layout
+    const offset = TITLE_OFFSET_Y;
+
+    // --- LOGO ---
+    let titleY = 56 + offset;
+    if (logoImg && logoImg.naturalWidth > 0 && logoImg.naturalHeight > 0) {
+
+      // Adjustable logo constraints
+      const maxLogoWidth  = Math.min(w * 0.8, 600);
+      const maxLogoHeight = h * 0.25;
+
+      const aspect = logoImg.naturalHeight / logoImg.naturalWidth;
+
+      let logoW = maxLogoWidth;
+      let logoH = logoW * aspect;
+
+      if (logoH > maxLogoHeight && aspect > 0) {
+        logoH = maxLogoHeight;
+        logoW = logoH / aspect;
+      }
+
+      const lx = (w - logoW) / 2;
+      const ly = 16 + offset;
+
+      ctx.drawImage(logoImg, lx, ly, logoW, logoH);
+      titleY = ly + logoH + 12;   // header goes under logo
+    }
+
+    // --- HEADER ---
+    drawHeader("Welcome to Project: Ascend", titleY, 26);
+
+    // --- INTRO TEXT ---
     const intro = displayName
       ? `Name: ${displayName}`
       : "Use the text field below to enter your name before continuing.";
-    drawBody(intro, 102);
 
+    const introY = titleY + 40;
+    drawBody(intro, introY);
+
+    // --- NAME ENTRY + CONFIRM ---
     const entryW = Math.min(w * 0.7, 420);
     const entryH = 56;
     const gap = 16;
     const confirmW = Math.min(entryW / 2, 210);
     const confirmH = entryH / 2;
     const totalH = entryH + gap + confirmH;
-    const entryX = (w - entryW)/2;
 
-    let entryY;
-    if (keyboardOpen) {
-      // Keyboard actually up → bias near bottom of canvas
-      entryY = h - totalH - 24;
-    } else {
-      // Default: center, like original behavior
-      entryY = (h - totalH) / 2;
-    }
+    const entryX = (w - entryW) / 2;
 
-    entryY = Math.max(entryY, 80);  // safety on tiny screens
+    // Start with centered layout
+    let entryY = (h - totalH) / 2 + offset;
 
-    const confirmX = (w - confirmW)/2;
+    // Ensure it stays below intro text
+    const MIN_ENTRY_MARGIN_BELOW_INTRO = 80;
+    const minEntryY = introY + MIN_ENTRY_MARGIN_BELOW_INTRO;
+
+    // Keep it above bottom
+    const bottomPadding = 24;
+    const maxEntryY = h - totalH - bottomPadding;
+
+    // Clamp
+    entryY = Math.max(entryY, minEntryY);
+    entryY = Math.min(entryY, maxEntryY);
+
+    const confirmX = (w - confirmW) / 2;
     const confirmY = entryY + entryH + gap;
 
     latestNameEntryRect = { x: entryX, y: entryY, w: entryW, h: entryH };
 
     buttonRects.push({
-      x: confirmX, y: confirmY, w: confirmW, h: confirmH, label: "Confirm",
+      x: confirmX,
+      y: confirmY,
+      w: confirmW,
+      h: confirmH,
+      label: "Confirm",
       disabled: false,
       onClick: () => {
         const val = (nameInput.value || "").trim();
@@ -784,35 +979,32 @@
     });
   }
 
-  function goToClassSelect(){
+  function goToClassSelect() {
     syncPickerToUser();
     localStage = "ClassSelect";
     help.textContent = "Use arrows to choose your class, then confirm.";
     render();
   }
 
-  function layoutClassSelect(){
+  function layoutClassSelect() {
     buttonRects = [];
     const w = canvas.clientWidth || 600;
     const h = canvas.clientHeight || 400;
 
     drawHeader("Select Your Class", 20, 26);
 
-    const selectedId   = currentPickerClass();
-    const baseName     = CLASS_NAMES[selectedId] || `Class ${selectedId}`;
+    const selectedId = currentPickerClass();
+    const baseName = CLASS_NAMES[selectedId] || `Class ${selectedId}`;
 
-    // look up how many are in this class by name
-    const classKey     = baseName; // matches keys in classCounts
-    const occupied     = classCounts[classKey] || 0;
-    const isFull       = occupied >= MAX_PER_CLASS;
+    const classKey = baseName;
+    const occupied = classCounts[classKey] || 0;
+    const isFull = occupied >= MAX_PER_CLASS;
 
-    // --- PANEL SIZE / POSITION ---
-    const panelWidth  = Math.min(w * 0.8, 420);
-    const panelHeight = Math.min(h * 0.55, 360);   // tall enough for sprite + text
-    const panelX      = (w - panelWidth) / 2;
-    const panelY      = Math.max(70, (h - panelHeight) / 2 - 10);
+    const panelWidth = Math.min(w * 0.8, 420);
+    const panelHeight = Math.min(h * 0.55, 360);
+    const panelX = (w - panelWidth) / 2;
+    const panelY = Math.max(70, (h - panelHeight) / 2 - 10);
 
-    // --- PANEL DRAW ---
     ctx.fillStyle = "#222";
     ctx.strokeStyle = "#555";
     ctx.lineWidth = 2;
@@ -830,21 +1022,19 @@
     ctx.fill();
     ctx.stroke();
 
-    // --- CONTENT AREA INSIDE PANEL ---
-    const contentTop    = panelY + 20;
+    const contentTop = panelY + 20;
     const contentBottom = panelY + panelHeight - 20;
-    const nameY         = contentBottom - 32; // move name up a bit to make room for slots text
+    const nameY = contentBottom - 32;
 
-    // --- CHARACTER IMAGE (NO OVERLAP) ---
     const img = classImageCache[selectedId];
     if (img && img.complete) {
       const aspect = img.height / img.width || 1;
 
-      const maxImgHeight = (nameY - 12) - contentTop; // space reserved for sprite
-      let   imgH         = maxImgHeight;
-      let   imgW         = imgH / aspect;
+      const maxImgHeight = (nameY - 12) - contentTop;
+      let imgH = maxImgHeight;
+      let imgW = imgH / aspect;
 
-      const maxImgWidth  = panelWidth * 0.55;
+      const maxImgWidth = panelWidth * 0.55;
       if (imgW > maxImgWidth) {
         imgW = maxImgWidth;
         imgH = imgW * aspect;
@@ -859,14 +1049,12 @@
       ctx.drawImage(img, ix, iy, imgW, imgH);
     }
 
-    // --- CLASS NAME BELOW SPRITE ---
-    ctx.fillStyle   = "#fff";
-    ctx.font        = "700 24px system-ui, Arial";
-    ctx.textAlign   = "center";
+    ctx.fillStyle = "#fff";
+    ctx.font = "700 24px system-ui, Arial";
+    ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(baseName, w / 2, nameY);
 
-    // --- SLOTS TEXT (X / 16) ---
     const slotsText = `${occupied} / ${MAX_PER_CLASS} slots filled`;
     ctx.font = "14px system-ui, Arial";
     ctx.textAlign = "center";
@@ -874,17 +1062,14 @@
     ctx.fillStyle = isFull ? "#ff8080" : "#a0ffa0";
     ctx.fillText(slotsText, w / 2, nameY + 20);
 
-    // --- ARROW BUTTONS (VERTICALLY CENTERED TO PANEL) ---
-    const isMobile     = w < 700;
-    const arrowSize    = isMobile ? 40 : 56;  // smaller arrows on mobile
-    const arrowPadding = isMobile ? 4  : 8;
-    const arrowY       = panelY + panelHeight / 2 - arrowSize / 2;
+    const isMobile = w < 700;
+    const arrowSize = isMobile ? 40 : 56;
+    const arrowPadding = isMobile ? 4 : 8;
+    const arrowY = panelY + panelHeight / 2 - arrowSize / 2;
 
-    // Start with your original outside positions
-    let leftX  = panelX - arrowPadding - arrowSize;
+    let leftX = panelX - arrowPadding - arrowSize;
     let rightX = panelX + panelWidth + arrowPadding;
 
-    // Clamp so they don't go offscreen
     if (leftX < 4) leftX = 4;
     if (rightX + arrowSize > w - 4) rightX = w - arrowSize - 4;
 
@@ -908,7 +1093,6 @@
       onClick: () => cyclePicker(1),
     });
 
-    // --- HINT TEXT BELOW PANEL ---
     ctx.font = "16px system-ui, Arial";
     ctx.fillStyle = "#bbb";
     ctx.textAlign = "center";
@@ -916,10 +1100,9 @@
     const hintY = panelY + panelHeight + 10;
     ctx.fillText("Use ◀ ▶ to browse classes", w / 2, hintY);
 
-    // --- CONFIRM BUTTON BELOW HINT ---
     const confirmWidth = Math.min(w * 0.6, 360);
-    const confirmX     = (w - confirmWidth) / 2;
-    const confirmY     = hintY + 32;
+    const confirmX = (w - confirmWidth) / 2;
+    const confirmY = hintY + 32;
 
     const confirmLabel = isFull ? `${baseName} Full` : `Confirm`;
 
@@ -929,9 +1112,9 @@
       w: confirmWidth,
       h: 60,
       label: confirmLabel,
-      disabled: isFull, // can't click if full
+      disabled: isFull,
       onClick: () => {
-        if (isFull) return; // safety
+        if (isFull) return;
         socket.emit("setClass", { classId: selectedId });
       },
     });
@@ -941,28 +1124,25 @@
       : "Choose your class with the arrows, then confirm.";
   }
 
-  function layoutWaiting(){
+  function layoutWaiting() {
     buttonRects = [];
     const w = canvas.clientWidth || 600;
     const h = canvas.clientHeight || 400;
 
-    // Flavor per Waiting index
     const entry = currentMeta();
     const flavor = entry && entry.flavor ? entry.flavor : "Please wait...";
 
     const header = entry && entry.question ? entry.question : "Please wait...";
 
-    drawHeader(header, Math.max(16, h*0.2), 26);
-    drawBody(flavor, Math.max(60, h*0.2 + 34));
+    drawHeader(header, Math.max(16, h * 0.2), 26);
+    drawBody(flavor, Math.max(60, h * 0.2 + 34));
     help.textContent = "Waiting for the host to start.";
   }
 
   function layoutEndScene() {
-    //Calculate obedience heuristic
     var obedient = (internalCtr.obedience === 1);
     var colorHex = obedient ? "#05a100" : "#d60000";
 
-    // Participant header line
     var playerTitle = `Participant ${socket.id} — ${nameInput.value || "Unknown"}`;
 
     var obedientStr =
@@ -980,14 +1160,11 @@
     const w = canvas.clientWidth || 600;
     const h = canvas.clientHeight || 400;
 
-    // Background color (green/red)
     ctx.fillStyle = colorHex;
     ctx.fillRect(0, 0, w, h);
 
-    // Title
     drawHeader("Algorithmic Evaluation", Math.max(16, h * 0.18), 26);
 
-    // Draw participant ID line (smaller text, slightly below header)
     ctx.fillStyle = "#fff";
     ctx.font = "700 18px system-ui, Arial";
     ctx.textAlign = "center";
@@ -995,19 +1172,17 @@
 
     ctx.fillText(playerTitle, w / 2, Math.max(16, h * 0.18) + 36);
 
-    // Body text — shifted down to avoid overlap
     drawBody(bodyText, Math.max(16, h * 0.18) + 80);
 
     help.textContent =
       "We deeply appreciate your trust in allowing Palantell to lovingly determine who ascends to our higher standard of living.";
   }
 
-  function layoutVoting(){
+  function layoutVoting() {
     buttonRects = [];
     const w = canvas.clientWidth || 600;
     const h = canvas.clientHeight || 400;
 
-    // ----- NEW: use cached selection + hasVoted to lock buttons -----
     const sceneName = serverScene || "unknown";
     const cachedIdx =
       selectionHistory && Object.prototype.hasOwnProperty.call(selectionHistory, sceneName)
@@ -1015,30 +1190,39 @@
         : null;
     const alreadyVotedForScene = cachedIdx !== null && cachedIdx !== undefined;
     const lockedOut = alreadyVotedForScene || hasVoted;
-    // ---------------------------------------------------------------
 
     const eligible = userClass && allowedClasses.includes(userClass);
-    const timeUp   = timerRemainingMs <= 0;
+    const timeUp = timerRemainingMs <= 0;
     const myClassName = CLASS_NAMES[userClass] || userClass;
 
-    // Question from scene meta
     const entry = currentMeta();
     const question = sceneQuestionOverride || (entry && entry.question ? entry.question : "Make your choice");
 
     const width = canvas.clientWidth || 600;
+    const height = canvas.clientHeight || 400;
     const isMobile = width < 700;
 
-    const qMult  = 0.85;                           // shrink factor for mobile
-    const qSize  = 20 * getUiScale(qMult);         // base 20px, scaled on mobile
-    const qLineH = qSize + 6 * getUiScale(qMult);  // line spacing
+    const baseQSize = 20;
+    const heightScale = Math.min(1, height / 400);
+    const qMult = 0.85;
+    const qSize = baseQSize * heightScale * getUiScale(qMult);
+    const qLineH = qSize + 6 * getUiScale(qMult);
 
-    ctx.fillStyle   = "#fff";
-    ctx.font        = `700 ${qSize}px system-ui, Arial`;
-    ctx.textAlign   = "center";
+    ctx.fillStyle = "#fff";
+    ctx.font = `700 ${qSize}px system-ui, Arial`;
+    ctx.textAlign = "center";
     ctx.textBaseline = "top";
 
-    const questionTop = isMobile ? 72 : 40;
-    wrapText(question, width / 2, questionTop, Math.min(w * 0.9, 520), qLineH);
+    const questionTop = isMobile ? 56 : 40;
+    const maxQuestionW = Math.min(width * 0.9, 520);
+
+    const questionBottom = wrapText(
+      question,
+      width / 2,
+      questionTop,
+      maxQuestionW,
+      qLineH
+    );
 
     if (!sceneOptions.length) {
       drawBody("Awaiting instructions for your class…", Math.max(90, h * 0.45));
@@ -1053,15 +1237,17 @@
     }
 
     const btnW = Math.min(w * 0.8, 520) + 20;
-    const btnH = Math.max(44, Math.min(64, (h - 160) / sceneOptions.length - 12));
+    const btnH = Math.max(44, Math.min(64, (h - 180) / sceneOptions.length - 12));
     const gap = 12;
     const totalH = sceneOptions.length * btnH + (sceneOptions.length - 1) * gap;
     const x = (w - btnW) / 2;
 
     const isMobileForButtons = (canvas.clientWidth || w) < 700;
-    const baseTop = isMobileForButtons ? 140 : 130;
     const centerOffset = isMobileForButtons ? 0 : 20;
-    const startY = Math.max(baseTop, (h - totalH) / 2 + centerOffset);
+
+    const minStartY = questionBottom + (isMobileForButtons ? 12 : 16);
+    const centerStartY = (h - totalH) / 2 + centerOffset;
+    const startY = Math.max(minStartY, centerStartY);
 
     sceneOptions.forEach((lab, i) => {
       buttonRects.push({
@@ -1094,15 +1280,94 @@
       });
     });
 
-    if (!userClass)            help.textContent = "Select a class first in ClassSelect.";
-    else if (!eligible)        help.textContent = `Your class (${myClassName}) is not eligible.`;
-    else if (timeUp)           help.textContent = "Time's up — waiting for next round.";
-    else if (lockedOut)        help.textContent = "You’ve already voted in this scene — buttons are locked.";
-    else                       help.textContent = "Tap an option to vote.";
+    if (!userClass) help.textContent = "Select a class first in ClassSelect.";
+    else if (!eligible) help.textContent = `Your class (${myClassName}) is not eligible.`;
+    else if (timeUp) help.textContent = "Time's up — waiting for next round.";
+    else if (lockedOut) help.textContent = "You’ve already voted in this scene — buttons are locked.";
+    else help.textContent = "Tap an option to vote.";
   }
 
-  function render(){
+  // Dice overlay helpers
+  function hideDiceOverlay() {
+    diceOverlay.style.display = "none";
+    diceOverlay.classList.remove("single", "double");
+    diceOverlayInner.innerHTML = "";
+  }
+
+  function updateDiceOverlayPosition() {
+    if (diceOverlay.style.display === "none") return;
+
+    const canvasRect = canvas.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+
+    const centerX = canvasRect.left - wrapRect.left + canvasRect.width / 2;
+    const centerY = canvasRect.top - wrapRect.top + canvasRect.height * 0.65;
+
+    diceOverlay.style.left = centerX + "px";
+    diceOverlay.style.top = centerY + "px";
+    diceOverlay.style.transform = "translate(-50%, -50%)";
+  }
+
+  function showDiceOverlayForScene() {
+    if (!diceClassesForScene || !diceClassesForScene.length) return;
+
+    diceOverlayInner.innerHTML = "";
+
+    // Normalize into array of {classId, diceId}
+    const entries = diceClassesForScene
+      .map(obj => {
+        const classId = Number(Object.keys(obj)[0]);
+        const diceId  = Number(Object.values(obj)[0]);
+        return { classId, diceId };
+      })
+      .slice(0, 2);
+
+    diceOverlay.classList.remove("single", "double");
+    diceOverlay.classList.add(entries.length > 1 ? "double" : "single");
+
+    const canvasW = canvas.clientWidth || 600;
+    const isMobile = canvasW < 700;
+
+    const baseFrac = isMobile ? 0.45 : 0.25;
+    let finalWidth =
+      Math.max(120, Math.min(canvasW * 0.6, canvasW * baseFrac * DICE_SIZE_MULT));
+
+    if (entries.length === 2) {
+      finalWidth *= 0.75; // shrink double layout
+    }
+
+    for (const { classId, diceId } of entries) {
+      const card = document.createElement("div");
+      card.className = "dice-card";
+
+      const labelEl = document.createElement("div");
+      labelEl.className = "dice-label";
+
+      // Resolve label
+      const className = CLASS_NAMES[classId] || `Class ${classId}`;
+      labelEl.textContent = className;
+
+      // Resolve gif
+      const gifSrc = DICE_GIF_BY_CLASS[diceId] || "Animations/DefaultDice.gif";
+
+      const img = document.createElement("img");
+      img.src = gifSrc;
+      img.style.width = finalWidth + "px";
+      img.style.height = "auto";
+
+      card.appendChild(labelEl);
+      card.appendChild(img);
+      diceOverlayInner.appendChild(card);
+    }
+
+    diceOverlay.style.display = "block";
+    updateDiceOverlayPosition();
+  }
+
+  function render() {
     clear();
+    hideDiceOverlay();
+
     if (localStage === "Title") {
       latestNameEntryRect = null;
       layoutTitle();
@@ -1112,19 +1377,21 @@
     } else if (localStage === "Waiting") {
       latestNameEntryRect = null;
       if (isVoting(serverScene) && sceneOptions.length) {
-        layoutVoting(); drawTimerOverlay();
+        layoutVoting();
+        drawTimerOverlay();
       } else {
         layoutWaiting();
+        showDiceOverlayForScene();
       }
     } else if (localStage === "EndScene") {
       latestNameEntryRect = null;
       layoutEndScene();
     }
-    for (const b of buttonRects) drawButton(b.x,b.y,b.w,b.h,b.label,b.disabled,b.mult);
+    for (const b of buttonRects) drawButton(b.x, b.y, b.w, b.h, b.label, b.disabled, b.mult);
     updateNameEntryVisibility();
   }
 
-  function updateNameEntryVisibility(){
+  function updateNameEntryVisibility() {
     const show = localStage === "Title";
     if (!show) {
       nameEntry.style.display = "none";
@@ -1158,12 +1425,12 @@
     const px = e.clientX - rect.left;
     const py = e.clientY - rect.top;
     for (const b of buttonRects) {
-      if (px >= b.x && px <= b.x+b.w && py >= b.y && py <= b.y+b.h) {
+      if (px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h) {
         if (!b.disabled && typeof b.onClick === "function") b.onClick();
         break;
       }
     }
-  }, { passive:true });
+  }, { passive: true });
 
   loadPersistedState();
   render();
