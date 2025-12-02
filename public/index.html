@@ -348,12 +348,20 @@
   });
 
   // Image assets (paths relative to /public)
-  const IMG_BACKGROUND_FOREST = "Images/Backgrounds/updatedforest(big).png";
   const IMG_BARD_STATIC = "Images/Characters/Large_BardStatic.png";
   const IMG_DRUID_STATIC = "Images/Characters/Large_DruidStatic.png";
   const IMG_ROGUE_STATIC = "Images/Characters/Large_RogueStatic.png";
   const IMG_WIZARD_STATIC = "Images/Characters/Large_WizardStatic.png";
   const IMG_PALADIN_STATIC = "Images/Characters/Large_PaladinStatic.png";
+
+  //Head assets
+  const HEAD_BARD_STATIC = "Images/Characters/Heads/BardHead.png";
+  const HEAD_DRUID_STATIC = "Images/Characters/Heads/DruidHead.png";
+  const HEAD_ROGUE_STATIC = "Images/Characters/Heads/RogueHead.png";
+  const HEAD_WIZARD_STATIC = "Images/Characters/Heads/WizardHead.png";
+  const HEAD_PALADIN_STATIC = "Images/Characters/Heads/PaladinHead.png";
+
+  const IMG_BACKGROUND_FOREST = "Images/Backgrounds/updatedforest(big).png";
   const IMG_ARROW_LEFT = "Images/UI/Large_ArrowUI.png";
   const IMG_ARROW_RIGHT = "Images/UI/Large_ArrowUI2.png";
   const IMG_BANNER = "Images/UI/Large_BannerUI.png";
@@ -461,6 +469,22 @@
     const img = new Image();
     img.src = src;
     classImageCache[id] = img;
+  }
+
+  const HEAD_IMAGES = {
+    1: HEAD_BARD_STATIC,
+    2: HEAD_DRUID_STATIC,
+    3: HEAD_ROGUE_STATIC,
+    4: HEAD_WIZARD_STATIC,
+    5: HEAD_PALADIN_STATIC,
+  };
+
+  const headImageCache = {};
+
+  for (const [id, src] of Object.entries(HEAD_IMAGES)) {
+    const img = new Image();
+    img.src = src;
+    headImageCache[id] = img;
   }
 
   var internalCtr = { obedience: 0, selfishness: 0, sacrifice: 0 };
@@ -892,6 +916,8 @@
 
     ctx.fillStyle = "#fff";
     ctx.fillText(line, w / 2, yy);
+    
+    return yy+lineH;
   }
 
   function wrapText(text, x, y, maxW, lineH) {
@@ -1205,16 +1231,17 @@
       Array.isArray(characterClassesForScene) &&
       characterClassesForScene.length > 0;
 
-    // If it's a "full cast" intro (5 characters), push even higher
-    const fullIntro = hasCharacters && characterClassesForScene.length >= 3;
+    // Use dice scene data coming from the server:
+    const hasRolling =
+      Array.isArray(diceClassesForScene) &&
+      diceClassesForScene.length > 0;
 
     // Header Y:
     // - normal: ~20% down
     // - hasCharacters: higher
-    // - fullIntro (all 5): even higher
     const headerY = hasCharacters
         ? Math.max(12, h * 0.12)
-        : Math.max(16, h * 0.20);
+        : Math.max(16, h * 0.20 * (hasRolling ? 0.9 : 1));
 
     // Subtitle/body just below header
     const bodyY = headerY + (hasCharacters ? 32 : 40);
@@ -1290,12 +1317,42 @@
 
     // --- BODY TEXT ---
     const bodyY = titleY + 44;
-    drawBody(bodyText, bodyY);
+    const bodyBottom = drawBody(bodyText, bodyY);
+
+    // --- CHARACTER HEAD NEAR BOTTOM (BASED ON USER CLASS) ---
+    const headImg = userClass ? headImageCache[userClass] : null;
+
+    if (headImg && (headImg.naturalWidth > 0 || headImg.width > 0)) {
+      const natW = headImg.naturalWidth || headImg.width || 1;
+      const natH = headImg.naturalHeight || headImg.height || 1;
+      const aspect = natH / natW;
+
+      // Space available from end of text to bottom
+      const paddingBottom = 24;
+      let maxHeight = h - bodyBottom - paddingBottom;
+
+      // Don't let it get too tiny or too huge
+      maxHeight = Math.max(60, Math.min(maxHeight, h * 0.35));
+
+      const maxWidth = Math.min(w * 0.35, 260);
+
+      let charH = maxHeight;
+      let charW = charH / aspect;
+
+      if (charW > maxWidth) {
+        charW = maxWidth;
+        charH = charW * aspect;
+      }
+
+      const cx = (w - charW) / 2;
+      const cy = h - paddingBottom - charH;
+
+      ctx.drawImage(headImg, cx, cy, charW, charH);
+    }
 
     help.textContent =
       "We deeply appreciate your trust in allowing Palantell to lovingly determine who ascends to our higher standard of living.";
   }
-  
 
   function layoutVoting() {
     buttonRects = [];

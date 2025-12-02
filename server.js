@@ -188,6 +188,18 @@ const VOTE_DEFS = {
                  allowedClasses: [5] }
 };
 
+function currentStatePayload() {
+  const diceClasses = DICE_SCENES[stateIdx] || null;
+  const characterClasses = CHARACTER_SCENES[stateIdx] || null;
+
+  return {
+    state,
+    index: stateIdx,
+    diceClasses,
+    characterClasses,
+  };
+}
+
 function isVotingScene(name){ return Object.prototype.hasOwnProperty.call(VOTE_DEFS, name); }
 function isServerScene(name){ return SCENE_ORDER.some(s => s.name === name); }
 
@@ -337,18 +349,7 @@ function applyStateIndex(newIdx) {
 
   if (state !== prevName && isVotingScene(state)) voteManager.clearVoted(state);
 
-  // NEW: find dice classes for this scene index, if any
-  const diceClasses = DICE_SCENES[stateIdx] || null;
-
-  const characterClasses = CHARACTER_SCENES[stateIdx] || null;
-
-
-  emitToJoinedAndAdmins("state", { 
-    state, 
-    index: stateIdx,
-    diceClasses,     // <--- added
-    characterClasses,
-  });
+  emitToJoinedAndAdmins("state", currentStatePayload());
 
   if (isVotingScene(state)) {
     emitToJoinedAndAdmins("sceneData", voteManager.getSceneData(state));
@@ -422,7 +423,7 @@ io.on("connection", (socket) => {
 
       adminSockets.add(socket.id);
       clientSockets.delete(socket.id);
-      socket.emit("state", { state, index: stateIdx });
+      socket.emit("state", currentStatePayload());
       if (isVotingScene(state)) socket.emit("sceneData", voteManager.getSceneData(state));
       socket.emit("timer", timerSnapshot());
     }
@@ -463,10 +464,11 @@ io.on("connection", (socket) => {
     socket.data.joined = true;
     clientSockets.add(socket.id);
 
-    socket.emit("state", { state, index: stateIdx });
+    socket.emit("state", currentStatePayload());
     if (isVotingScene(state)) socket.emit("sceneData", voteManager.getSceneData(state));
     socket.emit("timer", timerSnapshot());
   });
+
 
   // Admin: scene control
   socket.on("nextScene", () => {
