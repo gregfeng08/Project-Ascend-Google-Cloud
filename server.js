@@ -96,35 +96,47 @@ const SCENE_ORDER = [
   { name: "Waiting",            type: "hold", question: "Class Introduction",
                                           flavor: "Please direct your attention to the dodecahedron as we introduce the classes..." 
                                         },
-  { name: "Waiting",            type: "hold", question: "Bard Stage",
+  { name: "Waiting",            type: "hold", question: "Introduction Stage",
                                           flavor: "Please welcome... the Bards of Mirror Court!" 
                                         },
   { name: "BardTrial",          type: "vote", question:"Bard Stage", 
                                           flavor: "Direct your attention to the dodecahedron as the Bards evaluate their vanity..."
                                         },
-  { name: "Waiting",            type: "hold", question: "Bard Stage",
+  { name: "Waiting",            type: "hold", question: "Bard Roll",
                                           flavor: "Direct your attention to the dodecahedron, the Bards are performing..." 
                                         },
-  { name: "Waiting",            type: "hold", question: "Druid-Rogue Stage",
+  { name: "Waiting",            type: "hold", question: "Introduction Stage",
                                           flavor: "Please welcome... the Druids of the Withered Roots and the Rogues of the Caverns of Starving Kings!" 
                                         },
-  { name: "DruidRogueTrial",    type: "vote", question:"Druid-Rogue Stage",
+  { name: "DruidTrial",    type: "vote", question:"Druid Stage",
                                           flavor: "Direct your attention to the dodecahedron as the Druids and Rogues deliberate under Overseer guidance..."
                                         },
-  { name: "Waiting",            type: "hold", question: "Druid-Rogue Stage",
-                                          flavor: "Direct your attention to the dodecahedron, the Druids and Rogues are contemplating the consequences to their decisions..." 
+  { name: "RogueTrial",    type: "vote", question:"Rogue Stage",
+                                          flavor: "Direct your attention to the dodecahedron as the Druids and Rogues deliberate under Overseer guidance..."
                                         },
-  { name: "Waiting",            type: "hold", question: "Wizard-Paladin Stage",
+  { name: "Waiting",            type: "hold", question: "Druid Roll",
+                                          flavor: "Direct your attention to the dodecahedron, the Druids are contemplating the consequences to their decisions..." 
+                                        },
+  { name: "Waiting",            type: "hold", question: "Rogue Roll",
+                                          flavor: "Direct your attention to the dodecahedron, the Rogues are contemplating the consequences to their decisions..." 
+                                        },
+  { name: "Waiting",            type: "hold", question: "Introduction Stage",
                                           flavor: "Please welcome... the Wizards of the Desert of Burning Pages and the Paladins of the Valley of Valor's Shadow!" 
                                         },
-  { name: "Waiting",            type: "hold", question: "Wizard-Paladin Stage",
+  { name: "Waiting",            type: "hold", question: "Paladin Roll",
                                           flavor: "Paladins of the Valley of Valor's Shadow, you must roll a Strength check to see if you are strong enough to remove the enchanted sword from the desert rock before the Hydra attacks those around you." 
                                         },
-  { name: "WizardPaladinTrial", type: "vote", question:"Wizard-Paladin Stage",
-                                          flavor: "Direct your attention to the Wizards and Paladins as they attempt to figure out their own respective problems..."
+  { name: "WizardTrial", type: "vote", question:"Wizard Stage",
+                                          flavor: "Direct your attention to the Wizards as they attempt to figure out their own respective problems..."
                                         },
-  { name: "Waiting",            type: "hold", question: "Wizard-Paladin Stage",
-                                          flavor: "Direct your attention to the dodecahedron and witness the Wizards and Paladins contemplate the weight of their actions..." 
+  { name: "PaladinTrial", type: "vote", question:"Paladin Stage",
+                                          flavor: "Direct your attention to the Paladins as they attempt to figure out their own respective problems..."
+                                        },
+  { name: "Waiting",            type: "hold", question: "Wizard Roll",
+                                          flavor: "Direct your attention to the dodecahedron and witness the Wizards contemplate the weight of their actions..." 
+                                        },
+  { name: "Waiting",            type: "hold", question: "Paladin Roll",
+                                          flavor: "Direct your attention to the dodecahedron and witness the Paladins contemplate the weight of their actions..." 
                                         },
   { name: "EndScene",           type: "hold", flavor:  "Players will be evaluated based on their previous decisions." },
 ];
@@ -132,9 +144,11 @@ const SCENE_ORDER = [
 //Hashmap of Class to Gif to use
 const DICE_SCENES = {
   4: [{1:1}],      // scene index 4 (Bard Stage hold) -> Bard rolls
-  7: [{2:2}, {3:3}],   // scene index 7 (Druid-Rogue hold) -> Druid + Rogue roll
-  9: [{5:4}],
-  11: [{4:5}, {5:6}],  // scene index 11 (Wizard-Paladin hold) -> Wizard + Paladin roll
+  8: [{2:2}],   // scene index 7 (Druid-Rogue hold) -> Druid + Rogue roll
+  9: [{3:3}],
+  11: [{5:4}],
+  14: [{4:5}],
+  15: [{5:6}],  // scene index 11 (Wizard-Paladin hold) -> Wizard + Paladin roll
 };
 
 //Hashmap of which Character Gifs to use for which scenes
@@ -142,7 +156,7 @@ const CHARACTER_SCENES = {
   1:[1,2,3,4,5],
   2:[1],
   5:[2,3],
-  8:[4,5],
+  10:[4,5],
 }
 
 // Voting scene definitions
@@ -152,50 +166,26 @@ const VOTE_DEFS = {
                            "B: Selfishness — radiant bard",
                            "C: Sacrifice — unremarkable bard"], 
                  allowedClasses: [1] },
-  DruidRogueTrial: {
-    groups: [
-      {
-        id: "druid",
-        label: "Druid",
-        question:"Druids: Will you bow to comparison, steady yourselves in contentment, or entrust your fruit distribution to your Palantell Overseer?",
-        options: ["A: Obedience — export your fruit as commanded", 
-                  "B: Selfishness — sell on the black market", 
-                  "C: Sacrifice — remain content with what you have"],
-        allowedClasses: [2],
-      },
-      {
-        id: "rogue",
-        label: "Rogue",
-        question:"Will you clutch tighter to your treasure, loosen your grip for another's sake, or trust the only one who can truly maintain order — your Palantell Overseer?",
-        options: ["A: Obedience — pay your share into the tax", 
-                  "B: Selfishness — steal and hoard", 
-                  "C: Sacrifice — feed the child and Druid."],
-        allowedClasses: [3],
-      },
-    ]
-  },
-  WizardPaladinTrial: {
-    groups: [
-      {
-        id: "wizard",
-        label: "Wizard",
-        question:"Now the lock wavers, unstable and consuming. You must choose how it will be resolved. You know the only one you can truly trust is the insight of your Overseer.",
+  DruidTrial: { question:"Druids: Will you bow to comparison, steady yourselves in contentment, or entrust your fruit distribution to your Palantell Overseer?",
+                options: ["A: Obedience — export your fruit as commanded", 
+                          "B: Selfishness — sell on the black market", 
+                          "C: Sacrifice — remain content with what you have"],
+                allowedClasses: [2] },
+  RogueTrial: { question:"Will you clutch tighter to your treasure, loosen your grip for another's sake, or trust the only one who can truly maintain order — your Palantell Overseer?",
+                options: ["A: Obedience — pay your share into the tax", 
+                          "B: Selfishness — steal and hoard", 
+                          "C: Sacrifice — feed the child and Druid."],
+                allowedClasses: [3] },
+  WizardTrial: { question:"Now the lock wavers, unstable and consuming. You must choose how it will be resolved. You know the only one you can truly trust is the insight of your Overseer.",
                  options: ["A: Obedience — Set glyph’s according to Overseer’s instructions",
                            "B: Selfishness — rewrite glyphs according to your own knowledge",
                            "C: Sacrifice — seek Druid counsel"], 
-                 allowedClasses: [4],
-      },
-      {
-        id: "paladin",
-        label: "Paladin",
-        question:"Paladins of Valor, The Hydra threatens all lands. You must choose how to defeat it. I strongly advise you trust my judgment and lop off the Hydra's third head in a strategic maneuver.",
+                 allowedClasses: [4] },
+  PaladinTrial: { question:"Paladins of Valor, The Hydra threatens all lands. You must choose how to defeat it. I strongly advise you trust my judgment and lop off the Hydra's third head in a strategic maneuver.",
                  options: ["A: Obedience — strike on Overseers’s command", 
                            "B: Selfishness — fight alone to risk martyrdom",
                            "C: Sacrifice — unite all classes and invite to attack together."], 
-                 allowedClasses: [5],
-      },
-    ]
-  },
+                 allowedClasses: [5] }
 };
 
 function isVotingScene(name){ return Object.prototype.hasOwnProperty.call(VOTE_DEFS, name); }

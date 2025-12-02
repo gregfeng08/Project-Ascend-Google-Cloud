@@ -704,7 +704,7 @@
     }
   });
 
-  function isVoting(name) { return name !== "Waiting" && name !== "EndScene"; }
+  function isVoting(name) { return name !== "Waiting" && name !== "EndScene" && name !== "Credits"; }
 
   // Canvas + layout
   const canvas = document.getElementById("canvas");
@@ -1231,7 +1231,7 @@
     var obedient = (internalCtr.obedience === 1);
     var colorHex = obedient ? "#05a100" : "#d60000";
 
-    var playerTitle = `Participant ID \"${btoa(socket.id).slice(0,5)}\"": ${nameInput.value || "Unknown"}`;
+    var playerTitle = `Participant ID ${btoa(socket.id).slice(0,5)}: ${nameInput.value || "Unknown"}`;
 
     var obedientStr =
       `Thank you for your unwavering trust in the Palantell system. ` +
@@ -1295,6 +1295,7 @@
     help.textContent =
       "We deeply appreciate your trust in allowing Palantell to lovingly determine who ascends to our higher standard of living.";
   }
+  
 
   function layoutVoting() {
     buttonRects = [];
