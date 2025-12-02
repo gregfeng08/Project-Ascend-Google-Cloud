@@ -10,7 +10,10 @@ const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  pingInterval: 20000,
+  pingTimeout: 45000
+});
 
 const ADMIN_PW = process.env.PROJECT_ASCEND_ADMINPW || "";
 
@@ -108,11 +111,14 @@ const SCENE_ORDER = [
   { name: "Waiting",            type: "hold", question: "Introduction Stage",
                                           flavor: "Please welcome... the Druids of the Withered Roots and the Rogues of the Caverns of Starving Kings!" 
                                         },
-  { name: "DruidTrial",    type: "vote", question:"Druid Stage",
-                                          flavor: "Direct your attention to the dodecahedron as the Druids and Rogues deliberate under Overseer guidance..."
+  { name: "DruidTrial",         type: "vote", question:"Druid Stage",
+                                          flavor: "Direct your attention to the dodecahedron as the Druids deliberate under Overseer guidance..."
                                         },
-  { name: "RogueTrial",    type: "vote", question:"Rogue Stage",
-                                          flavor: "Direct your attention to the dodecahedron as the Druids and Rogues deliberate under Overseer guidance..."
+  { name: "Waiting",            type: "hold", question:"Druid Stage",
+                                          flavor: "Direct your attention to the dodecahedron as the Druids see the future that unfolds..."
+                                        },
+  { name: "RogueTrial",         type: "vote", question:"Rogue Stage",
+                                          flavor: "Direct your attention to the dodecahedron as the Rogues deliberate under Overseer guidance..."
                                         },
   { name: "Waiting",            type: "hold", question: "Druid Roll",
                                           flavor: "Direct your attention to the dodecahedron, the Druids are contemplating the consequences to their decisions..." 
@@ -144,11 +150,11 @@ const SCENE_ORDER = [
 //Hashmap of Class to Gif to use
 const DICE_SCENES = {
   4: [{1:1}],      // scene index 4 (Bard Stage hold) -> Bard rolls
-  8: [{2:2}],   // scene index 7 (Druid-Rogue hold) -> Druid + Rogue roll
-  9: [{3:3}],
-  11: [{5:4}],
-  14: [{4:5}],
-  15: [{5:6}],  // scene index 11 (Wizard-Paladin hold) -> Wizard + Paladin roll
+  9: [{2:2}],   // scene index 7 (Druid-Rogue hold) -> Druid + Rogue roll
+  10: [{3:3}],
+  12: [{5:4}],
+  15: [{4:5}],
+  16: [{5:6}],  // scene index 11 (Wizard-Paladin hold) -> Wizard + Paladin roll
 };
 
 //Hashmap of which Character Gifs to use for which scenes
@@ -156,7 +162,7 @@ const CHARACTER_SCENES = {
   1:[1,2,3,4,5],
   2:[1],
   5:[2,3],
-  10:[4,5],
+  11:[4,5],
 }
 
 // Voting scene definitions

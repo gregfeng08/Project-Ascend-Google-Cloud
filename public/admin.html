@@ -176,7 +176,11 @@
   }
   drawAdminTimer();
 
-  const socket = io();
+  const socket = io({
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    timeout: 60000
+  });
 
   // Prompt for admin password once when the page loads
   let adminPw = prompt("Enter admin password:");
@@ -194,6 +198,11 @@
   socket.on("connect", () => {
     connDot.style.backgroundColor = "limegreen";
     statusEl.textContent = "Connected: " + socket.id;
+
+    socket.emit("identify", {
+      role: "admin",
+      adminPw
+    });
   });
 
   socket.on("disconnect", () => {

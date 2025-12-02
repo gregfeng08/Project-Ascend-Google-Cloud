@@ -198,7 +198,7 @@
   #characterOverlayInner {
     display: flex;
     gap: 8px;
-    padding: 6px 10px;
+    padding: 4px 10px;
     border-radius: 10px;
     background: rgba(0, 0, 0, 0.7);
     align-items: center;
@@ -257,6 +257,10 @@
     <div id="characterOverlayInner"></div>
   </div>
 
+  <button id="resetClientBtn" style="margin-top:8px; font-size:12px; opacity:0.8;">
+    Reset Selections
+  </button>
+
   <p id="help" class="hint">Enter your name, then choose a class to join.</p>
   <p id="status" style="opacity:.7;margin-top:10px;">&nbsp;</p>
 </div>
@@ -272,6 +276,7 @@
   const help = document.getElementById("help");
   const nameEntry = document.getElementById("nameEntry");
   const nameInput = document.getElementById("nameInput");
+  const resetClientBtn = document.getElementById("resetClientBtn");
 
   // Dice overlay DOM
   const diceOverlay = document.getElementById("diceOverlay");
@@ -301,6 +306,28 @@
   let diceClassesForScene = null;
   let characterClassesForScene = null;
 
+  resetClientBtn.addEventListener("click", () => {
+    const ok = confirm(
+      "This will clear your saved name, class, and choices on this device and restart the experience. Continue?"
+    );
+    if (!ok) return;
+
+    try {
+      localStorage.removeItem(STORAGE_KEYS.name);
+      localStorage.removeItem(STORAGE_KEYS.class);
+      localStorage.removeItem(STORAGE_KEYS.selections);
+    } catch (e) {
+      console.warn("Failed to clear localStorage", e);
+    }
+
+    // Also reset any local-only state you care about
+    selectionHistory = {};
+    internalCtr = { obedience: 0, selfishness: 0, sacrifice: 0 };
+
+    // Hard reload to restart from Title
+    location.reload();
+  });
+
   function loadPersistedState() {
     // name
     const savedName = localStorage.getItem(STORAGE_KEYS.name);
@@ -328,6 +355,9 @@
         selectionHistory = {};
       }
     }
+
+    //Rebuild internal coutner
+    recomputeInternalCtrFromSelections();
 
     // If we have BOTH a name and a class, skip Title/ClassSelect
     if (displayName && userClass) {
@@ -372,7 +402,7 @@
   const IMG_BACKGROUND_PANEL = "Images/UI/Large_BKGui.png";
   const IMG_STAT_PANEL = "Images/UI/Large_StatUI.png";
 
-  // Palantell logo (update path if needed)
+  // Palentell logo (update path if needed)
   const IMG_LOGO = "Images/UI/palantell-logo.png";
 
   const CLASS_NAMES = {
@@ -386,23 +416,23 @@
 
   // Dice GIFs per class (update paths as needed)
   const DICE_GIF_BY_CLASS = {
-    1: "Animations/BardDice-9.gif",
-    2: "Animations/DruidDice-5.gif",
-    3: "Animations/RogueDice-8.gif",
-    4: "Animations/PaladinDice-12.gif",
-    5: "Animations/WizardDice-2.gif",
-    6: "Animations/GlitchDice.gif",
+    1: "Animations/DiceAnims/BardDice-9.gif",
+    2: "Animations/DiceAnims/DruidDice-5.gif",
+    3: "Animations/DiceAnims/RogueDice-8.gif",
+    4: "Animations/DiceAnims/PaladinDice-12.gif",
+    5: "Animations/DiceAnims/WizardDice-2.gif",
+    6: "Animations/DiceAnims/GlitchDice.gif",
   };
 
   const DICE_SIZE_MULT = 1.3;
 
   // Class GIFs per class (update paths as needed)
   const CLASS_GIF_BY_CLASS = {
-    1: IMG_BARD_STATIC,
-    2: IMG_DRUID_STATIC,
-    3: IMG_ROGUE_STATIC,
-    4: IMG_WIZARD_STATIC,
-    5: IMG_PALADIN_STATIC,
+    1: "Animations/CharacterAnims/BardGif.gif",
+    2: "Animations/CharacterAnims/DruidGif.gif",
+    3: "Animations/CharacterAnims/Roguegif.gif",
+    4: "Animations/CharacterAnims/WizardGif.gif",
+    5: "Animations/CharacterAnims/PaladinGif.gif",
   };
 
   const CLASS_SIZE_MULT = 1;
@@ -489,7 +519,11 @@
 
   var internalCtr = { obedience: 0, selfishness: 0, sacrifice: 0 };
 
-  const socket = io();
+  const socket = io({
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    timeout: 60000
+  });
   socket.emit("identify", { role: "client" });
 
   socket.on("resetClientCache", () => {
@@ -663,6 +697,28 @@
   });
 
   function copyList(list) { return Array.isArray(list) ? list.slice() : []; }
+
+  function recomputeInternalCtrFromSelections() {
+    internalCtr = { obedience: 0, selfishness: 0, sacrifice: 0 };
+
+    if (!selectionHistory) return;
+
+    for (const idx of Object.values(selectionHistory)) {
+      switch (idx) {
+        case 0:
+          internalCtr.obedience++;
+          break;
+        case 1:
+          internalCtr.selfishness++;
+          break;
+        case 2:
+          internalCtr.sacrifice++;
+          break;
+        default:
+          break;
+      }
+    }
+  }
 
   function findGroupForUser(data) {
     if (!data || !Array.isArray(data.groups) || !userClass) return null;
@@ -1241,7 +1297,7 @@
     // - hasCharacters: higher
     const headerY = hasCharacters
         ? Math.max(12, h * 0.12)
-        : Math.max(16, h * 0.20 * (hasRolling ? 0.9 : 1));
+        : Math.max(16, h * 0.20 * (hasRolling ? 0.7 : 1));
 
     // Subtitle/body just below header
     const bodyY = headerY + (hasCharacters ? 32 : 40);
@@ -1250,18 +1306,19 @@
     drawBody(flavor, bodyY);
 
     help.textContent = hasCharacters
-      ? "Meet the classes of Palantell."
+      ? "Meet the classes of Palentell."
       : "Waiting for the host to start.";
   }
 
   function layoutEndScene() {
+    // Decide outcome
     var obedient = (internalCtr.obedience === 1);
     var colorHex = obedient ? "#05a100" : "#d60000";
 
-    var playerTitle = `Participant ID ${btoa(socket.id).slice(0,5)}: ${nameInput.value || "Unknown"}`;
+    var playerTitle = `Participant ID ${btoa(socket.id).slice(0, 5)}: ${nameInput.value || "Unknown"}`;
 
     var obedientStr =
-      `Thank you for your unwavering trust in the Palantell system. ` +
+      `Thank you for your unwavering trust in the Palentell system. ` +
       `Please wait for our patients to exit before leaving. Thank you for your cooperation!`;
 
     var disobedientStr =
@@ -1279,13 +1336,14 @@
     ctx.fillStyle = colorHex;
     ctx.fillRect(0, 0, w, h);
 
-    // --- PALANTELL LOGO AT TOP ---
+    // --- Palentell LOGO AT TOP ---
     let headerTop = Math.max(16, h * 0.16); // default header Y if logo not available
 
-    if (logoImg && logoImg.naturalWidth > 0 && logoImg.naturalHeight > 0) {
+    if (logoImg && (logoImg.naturalWidth > 0 || logoImg.width > 0)) {
       const maxLogoWidth  = Math.min(w * 0.5, 260);
       const maxLogoHeight = h * 0.18;
-      const aspect = logoImg.naturalHeight / logoImg.naturalWidth || 1;
+      const aspect = (logoImg.naturalHeight || logoImg.height || 1) /
+                    (logoImg.naturalWidth  || logoImg.width  || 1);
 
       let logoW = maxLogoWidth;
       let logoH = logoW * aspect;
@@ -1319,39 +1377,41 @@
     const bodyY = titleY + 44;
     const bodyBottom = drawBody(bodyText, bodyY);
 
-    // --- CHARACTER HEAD NEAR BOTTOM (BASED ON USER CLASS) ---
+    // --- CHARACTER HEAD AFTER BODY TEXT (BASED ON USER CLASS) ---
     const headImg = userClass ? headImageCache[userClass] : null;
 
     if (headImg && (headImg.naturalWidth > 0 || headImg.width > 0)) {
-      const natW = headImg.naturalWidth || headImg.width || 1;
+      const natW = headImg.naturalWidth || headImg.width  || 1;
       const natH = headImg.naturalHeight || headImg.height || 1;
       const aspect = natH / natW;
 
-      // Space available from end of text to bottom
-      const paddingBottom = 24;
-      let maxHeight = h - bodyBottom - paddingBottom;
+      // Reasonable maximum size for the head
+      const maxWidth  = Math.min(w * 0.35, 260);
+      const maxHeight = h * 0.25;
 
-      // Don't let it get too tiny or too huge
-      maxHeight = Math.max(60, Math.min(maxHeight, h * 0.35));
+      let charW = maxWidth;
+      let charH = charW * aspect;
 
-      const maxWidth = Math.min(w * 0.35, 260);
-
-      let charH = maxHeight;
-      let charW = charH / aspect;
-
-      if (charW > maxWidth) {
-        charW = maxWidth;
-        charH = charW * aspect;
+      if (charH > maxHeight) {
+        charH = maxHeight;
+        charW = charH / aspect;
       }
 
+      const gap = 28; // spacing from end of text
       const cx = (w - charW) / 2;
-      const cy = h - paddingBottom - charH;
+      let cy = bodyBottom + gap;
+
+      // Prevent the head from going off the bottom on small/mobile screens
+      const bottomMargin = 20;
+      if (cy + charH + bottomMargin > h) {
+        cy = Math.max(bodyBottom + 8, h - charH - bottomMargin);
+      }
 
       ctx.drawImage(headImg, cx, cy, charW, charH);
     }
 
     help.textContent =
-      "We deeply appreciate your trust in allowing Palantell to lovingly determine who ascends to our higher standard of living.";
+      "We deeply appreciate your trust in allowing Palentell to lovingly determine who ascends to our higher standard of living.";
   }
 
   function layoutVoting() {
@@ -1579,24 +1639,30 @@
       Math.min(canvasW * 0.6, canvasW * baseFrac * CLASS_SIZE_MULT)
     );
 
-    if (classes.length === 2) finalWidth *= 0.6;
+    if (classes.length === 2) finalWidth *= isMobile ? 0.8: 0.6;
     if (classes.length === 5) finalWidth *= 0.4;
+
+    // 🔹 Full introduction scene (index 1): use STATIC character images
+    const useStaticCharacters =
+      serverScene === "Waiting" &&
+      serverIndex === 1 &&       // <- "Class Introduction" in your SCENE_ORDER
+      classes.length === 5;
 
     for (const classId of classes) {
       const card = document.createElement("div");
       card.className = "character-card";
 
-      //const labelEl = document.createElement("div");
-      //labelEl.className = "character-label";
-      //labelEl.textContent = CLASS_NAMES[classId] || `Class ${classId}`;
-
       const img = document.createElement("img");
-      const gifSrc = CLASS_GIF_BY_CLASS[classId] || IMG_BARD_STATIC;
-      img.src = gifSrc;
+
+      // Choose source based on whether we're in the full intro scene
+      const src = useStaticCharacters
+        ? (CLASS_IMAGES[classId] || IMG_BARD_STATIC)
+        : (CLASS_GIF_BY_CLASS[classId] || IMG_BARD_STATIC);
+
+      img.src = src;
       img.style.width = finalWidth + "px";
       img.style.height = "auto";
 
-      //card.appendChild(labelEl);
       card.appendChild(img);
       characterOverlayInner.appendChild(card);
     }
