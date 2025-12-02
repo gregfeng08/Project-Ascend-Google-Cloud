@@ -152,6 +152,40 @@
     5: "Paladin",
   };
 
+  // --- Wake Lock to keep admin screen awake ---
+  let wakeLock = null;
+
+  async function requestWakeLock() {
+    if (!('wakeLock' in navigator)) {
+      console.log('Wake Lock API not supported in this browser');
+      return;
+    }
+
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      console.log('Wake Lock is active');
+
+      wakeLock.addEventListener('release', () => {
+        console.log('Wake Lock was released');
+        wakeLock = null;
+      });
+    } catch (err) {
+      console.error('Wake Lock error:', err.name, err.message);
+    }
+  }
+
+  // Re-request on tab becoming visible again (lock is released when hidden)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && wakeLock === null) {
+      requestWakeLock();
+    }
+  });
+
+  // Kick it off once when the page loads
+  requestWakeLock();
+  // --- end Wake Lock ---
+
+
   // Timer canvas
   const timerCanvas = document.getElementById("adminTimer");
   const tctx = timerCanvas.getContext("2d");

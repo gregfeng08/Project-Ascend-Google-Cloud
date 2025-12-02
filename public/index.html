@@ -519,6 +519,53 @@
 
   var internalCtr = { obedience: 0, selfishness: 0, sacrifice: 0 };
 
+  // --- Persistent Wake Lock to keep client screen awake ---
+  let wakeLock = null;
+
+  async function requestWakeLock() {
+    if (!('wakeLock' in navigator)) {
+      console.log('Wake Lock API not supported in this browser');
+      return;
+    }
+
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      console.log('Client Wake Lock is active');
+
+      wakeLock.addEventListener('release', () => {
+        console.log('Client Wake Lock was released');
+        wakeLock = null;
+
+        // If the tab is still visible, try to re-acquire it
+        if (document.visibilityState === 'visible') {
+          requestWakeLock();
+        }
+      });
+    } catch (err) {
+      console.error('Client Wake Lock error:', err.name, err.message);
+    }
+  }
+
+  // Re-request when the tab becomes visible again
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && wakeLock === null) {
+      requestWakeLock();
+    }
+  });
+
+  // Some mobile browsers want a user gesture before allowing wake lock.
+  // Use the first click/touch to (re)request it.
+  function enableWakeLockOnFirstInteraction() {
+    requestWakeLock();
+    window.removeEventListener('click', enableWakeLockOnFirstInteraction);
+    window.removeEventListener('touchstart', enableWakeLockOnFirstInteraction);
+  }
+  window.addEventListener('click', enableWakeLockOnFirstInteraction, { once: true });
+  window.addEventListener('touchstart', enableWakeLockOnFirstInteraction, { once: true });
+
+  // Try once on load too (works on some desktop/mobile browsers)
+  requestWakeLock();
+
   const socket = io({
     reconnection: true,
     reconnectionAttempts: Infinity,
