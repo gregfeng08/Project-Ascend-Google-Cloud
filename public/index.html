@@ -186,6 +186,52 @@
     border-radius: 12px;
     image-rendering: auto;
   }
+
+  /* Character overlay */
+  #characterOverlay {
+    position: absolute;
+    display: none;
+    z-index: 4;
+    pointer-events: none;
+  }
+
+  #characterOverlayInner {
+    display: flex;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  #characterOverlay.double #characterOverlayInner {
+    flex-direction: row;
+  }
+
+  #characterOverlay.single #characterOverlayInner {
+    flex-direction: column;
+  }
+
+  .character-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 0 0 auto;
+  }
+
+  .character-label {
+    font-size: 14px;
+    margin-bottom: 6px;
+    opacity: 0.9;
+  }
+
+  .character-card img {
+    display:block;
+    border-radius: 12px;
+    image-rendering: auto;
+  }
 </style>
 
 <div id="wrap">
@@ -205,6 +251,10 @@
   <!-- Dice overlay (dice GIFs + labels go here) -->
   <div id="diceOverlay">
     <div id="diceOverlayInner"></div>
+  </div>
+
+  <div id="characterOverlay">
+    <div id="characterOverlayInner"></div>
   </div>
 
   <p id="help" class="hint">Enter your name, then choose a class to join.</p>
@@ -227,6 +277,9 @@
   const diceOverlay = document.getElementById("diceOverlay");
   const diceOverlayInner = document.getElementById("diceOverlayInner");
 
+  const characterOverlay = document.getElementById("characterOverlay");
+  const characterOverlayInner = document.getElementById("characterOverlayInner");
+
   // ----- localStorage keys + helpers -----
   const STORAGE_KEYS = {
     name: "name",
@@ -246,6 +299,7 @@
   let baselineVH = null;   // "normal" viewport height (no keyboard)
 
   let diceClassesForScene = null;
+  let characterClassesForScene = null;
 
   function loadPersistedState() {
     // name
@@ -333,6 +387,17 @@
   };
 
   const DICE_SIZE_MULT = 1.3;
+
+  // Class GIFs per class (update paths as needed)
+  const CLASS_GIF_BY_CLASS = {
+    1: IMG_BARD_STATIC,
+    2: IMG_DRUID_STATIC,
+    3: IMG_ROGUE_STATIC,
+    4: IMG_WIZARD_STATIC,
+    5: IMG_PALADIN_STATIC,
+  };
+
+  const CLASS_SIZE_MULT = 1;
 
   // ----- class capacity UI -----
   const MAX_PER_CLASS = 16;
@@ -520,7 +585,7 @@
   });
 
   // State updates (include index so we can read flavor/question)
-  socket.on("state", ({ state, index, diceClasses }) => {
+  socket.on("state", ({ state, index, diceClasses, characterClasses }) => {
     const prevScene = serverScene;
     const prevWasVoting = isVoting(prevScene);
     const prevAllowed = copyList(allowedClasses);
@@ -531,6 +596,7 @@
 
     // NEW: store dice info for this scene (or clear it)
     diceClassesForScene = Array.isArray(diceClasses) ? diceClasses.slice(0, 2) : null;
+    characterClassesForScene = Array.isArray(characterClasses) ? characterClasses.slice() : null;
 
     const nowIsVoting = isVoting(serverScene);
 
@@ -690,6 +756,7 @@
     fitForDPR();
     render();
     updateDiceOverlayPosition();
+    updateCharacterOverlayPosition();
   }
 
   function fitForDPR() {
@@ -1131,19 +1198,40 @@
 
     const entry = currentMeta();
     const flavor = entry && entry.flavor ? entry.flavor : "Please wait...";
-
     const header = entry && entry.question ? entry.question : "Please wait...";
 
-    drawHeader(header, Math.max(16, h * 0.2), 26);
-    drawBody(flavor, Math.max(60, h * 0.2 + 34));
-    help.textContent = "Waiting for the host to start.";
+    // Use character scene data coming from the server:
+    const hasCharacters =
+      Array.isArray(characterClassesForScene) &&
+      characterClassesForScene.length > 0;
+
+    // If it's a "full cast" intro (5 characters), push even higher
+    const fullIntro = hasCharacters && characterClassesForScene.length >= 3;
+
+    // Header Y:
+    // - normal: ~20% down
+    // - hasCharacters: higher
+    // - fullIntro (all 5): even higher
+    const headerY = hasCharacters
+        ? Math.max(12, h * 0.12)
+        : Math.max(16, h * 0.20);
+
+    // Subtitle/body just below header
+    const bodyY = headerY + (hasCharacters ? 32 : 40);
+
+    drawHeader(header, headerY, 26);
+    drawBody(flavor, bodyY);
+
+    help.textContent = hasCharacters
+      ? "Meet the classes of Palantell."
+      : "Waiting for the host to start.";
   }
 
   function layoutEndScene() {
     var obedient = (internalCtr.obedience === 1);
     var colorHex = obedient ? "#05a100" : "#d60000";
 
-    var playerTitle = `Participant ${socket.id} — ${nameInput.value || "Unknown"}`;
+    var playerTitle = `Participant ID \"${btoa(socket.id).slice(0,5)}\"": ${nameInput.value || "Unknown"}`;
 
     var obedientStr =
       `Thank you for your unwavering trust in the Palantell system. ` +
@@ -1160,19 +1248,49 @@
     const w = canvas.clientWidth || 600;
     const h = canvas.clientHeight || 400;
 
+    // Solid background
     ctx.fillStyle = colorHex;
     ctx.fillRect(0, 0, w, h);
 
-    drawHeader("Algorithmic Evaluation", Math.max(16, h * 0.18), 26);
+    // --- PALANTELL LOGO AT TOP ---
+    let headerTop = Math.max(16, h * 0.16); // default header Y if logo not available
 
+    if (logoImg && logoImg.naturalWidth > 0 && logoImg.naturalHeight > 0) {
+      const maxLogoWidth  = Math.min(w * 0.5, 260);
+      const maxLogoHeight = h * 0.18;
+      const aspect = logoImg.naturalHeight / logoImg.naturalWidth || 1;
+
+      let logoW = maxLogoWidth;
+      let logoH = logoW * aspect;
+
+      if (logoH > maxLogoHeight) {
+        logoH = maxLogoHeight;
+        logoW = logoH / aspect;
+      }
+
+      const lx = (w - logoW) / 2;
+      const ly = Math.max(10, h * 0.06);
+
+      ctx.drawImage(logoImg, lx, ly, logoW, logoH);
+
+      // Place header just under the logo
+      headerTop = ly + logoH + 12;
+    }
+
+    // --- HEADER ---
+    drawHeader("Algorithmic Evaluation", headerTop, 26);
+
+    // --- PLAYER TITLE ---
+    const titleY = headerTop + 40;
     ctx.fillStyle = "#fff";
     ctx.font = "700 18px system-ui, Arial";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
+    ctx.fillText(playerTitle, w / 2, titleY);
 
-    ctx.fillText(playerTitle, w / 2, Math.max(16, h * 0.18) + 36);
-
-    drawBody(bodyText, Math.max(16, h * 0.18) + 80);
+    // --- BODY TEXT ---
+    const bodyY = titleY + 44;
+    drawBody(bodyText, bodyY);
 
     help.textContent =
       "We deeply appreciate your trust in allowing Palantell to lovingly determine who ascends to our higher standard of living.";
@@ -1294,6 +1412,12 @@
     diceOverlayInner.innerHTML = "";
   }
 
+  // Dice overlay helpers
+  function hideCharacterOverlay() {
+    characterOverlay.style.display = "none";
+    characterOverlayInner.innerHTML = "";
+  }
+
   function updateDiceOverlayPosition() {
     if (diceOverlay.style.display === "none") return;
 
@@ -1306,6 +1430,20 @@
     diceOverlay.style.left = centerX + "px";
     diceOverlay.style.top = centerY + "px";
     diceOverlay.style.transform = "translate(-50%, -50%)";
+  }
+
+  function updateCharacterOverlayPosition() {
+    if (characterOverlay.style.display === "none") return;
+
+    const canvasRect = canvas.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+
+    const centerX = canvasRect.left - wrapRect.left + canvasRect.width / 2;
+    const centerY = canvasRect.top - wrapRect.top + canvasRect.height * 0.65;
+
+    characterOverlay.style.left = centerX + "px";
+    characterOverlay.style.top = centerY + "px";
+    characterOverlay.style.transform = "translate(-50%, -50%)";
   }
 
   function showDiceOverlayForScene() {
@@ -1364,9 +1502,55 @@
     updateDiceOverlayPosition();
   }
 
+  function showCharacterOverlayForScene() {
+    if (!Array.isArray(characterClassesForScene) || !characterClassesForScene.length) return;
+
+    characterOverlayInner.innerHTML = "";
+
+    const classes = characterClassesForScene.slice();
+
+    characterOverlay.classList.remove("single", "double");
+    characterOverlay.classList.add(classes.length > 1 ? "double" : "single");
+
+    const canvasW = canvas.clientWidth || 600;
+    const isMobile = canvasW < 700;
+
+    const baseFrac = isMobile ? 0.45 : 0.3;
+    let finalWidth = Math.max(
+      120,
+      Math.min(canvasW * 0.6, canvasW * baseFrac * CLASS_SIZE_MULT)
+    );
+
+    if (classes.length === 2) finalWidth *= 0.6;
+    if (classes.length === 5) finalWidth *= 0.4;
+
+    for (const classId of classes) {
+      const card = document.createElement("div");
+      card.className = "character-card";
+
+      //const labelEl = document.createElement("div");
+      //labelEl.className = "character-label";
+      //labelEl.textContent = CLASS_NAMES[classId] || `Class ${classId}`;
+
+      const img = document.createElement("img");
+      const gifSrc = CLASS_GIF_BY_CLASS[classId] || IMG_BARD_STATIC;
+      img.src = gifSrc;
+      img.style.width = finalWidth + "px";
+      img.style.height = "auto";
+
+      //card.appendChild(labelEl);
+      card.appendChild(img);
+      characterOverlayInner.appendChild(card);
+    }
+
+    characterOverlay.style.display = "block";
+    updateCharacterOverlayPosition();
+  }
+
   function render() {
     clear();
     hideDiceOverlay();
+    hideCharacterOverlay();
 
     if (localStage === "Title") {
       latestNameEntryRect = null;
@@ -1382,6 +1566,7 @@
       } else {
         layoutWaiting();
         showDiceOverlayForScene();
+        showCharacterOverlayForScene();
       }
     } else if (localStage === "EndScene") {
       latestNameEntryRect = null;

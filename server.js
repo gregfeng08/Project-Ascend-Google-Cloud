@@ -97,7 +97,7 @@ const SCENE_ORDER = [
                                           flavor: "Please direct your attention to the dodecahedron as we introduce the classes..." 
                                         },
   { name: "Waiting",            type: "hold", question: "Bard Stage",
-                                          flavor: "Please welcome: The Bards of Mirror Court!" 
+                                          flavor: "Please welcome... the Bards of Mirror Court!" 
                                         },
   { name: "BardTrial",          type: "vote", question:"Bard Stage", 
                                           flavor: "Direct your attention to the dodecahedron as the Bards evaluate their vanity..."
@@ -106,7 +106,7 @@ const SCENE_ORDER = [
                                           flavor: "Direct your attention to the dodecahedron, the Bards are performing..." 
                                         },
   { name: "Waiting",            type: "hold", question: "Druid-Rogue Stage",
-                                          flavor: "Please welcome: The Druids of the Withered Roots and the Rogues of the Caverns of Starving Kings!" 
+                                          flavor: "Please welcome... the Druids of the Withered Roots and the Rogues of the Caverns of Starving Kings!" 
                                         },
   { name: "DruidRogueTrial",    type: "vote", question:"Druid-Rogue Stage",
                                           flavor: "Direct your attention to the dodecahedron as the Druids and Rogues deliberate under Overseer guidance..."
@@ -115,7 +115,7 @@ const SCENE_ORDER = [
                                           flavor: "Direct your attention to the dodecahedron, the Druids and Rogues are contemplating the consequences to their decisions..." 
                                         },
   { name: "Waiting",            type: "hold", question: "Wizard-Paladin Stage",
-                                          flavor: "Please welcome: The Wizards of the Desert of Burning Pages and the Paladins of the Valley of Valor's Shadow!" 
+                                          flavor: "Please welcome... the Wizards of the Desert of Burning Pages and the Paladins of the Valley of Valor's Shadow!" 
                                         },
   { name: "Waiting",            type: "hold", question: "Wizard-Paladin Stage",
                                           flavor: "Paladins of the Valley of Valor's Shadow, you must roll a Strength check to see if you are strong enough to remove the enchanted sword from the desert rock before the Hydra attacks those around you." 
@@ -136,6 +136,14 @@ const DICE_SCENES = {
   9: [{5:4}],
   11: [{4:5}, {5:6}],  // scene index 11 (Wizard-Paladin hold) -> Wizard + Paladin roll
 };
+
+//Hashmap of which Character Gifs to use for which scenes
+const CHARACTER_SCENES = {
+  1:[1,2,3,4,5],
+  2:[1],
+  5:[2,3],
+  8:[4,5],
+}
 
 // Voting scene definitions
 const VOTE_DEFS = {
@@ -342,10 +350,14 @@ function applyStateIndex(newIdx) {
   // NEW: find dice classes for this scene index, if any
   const diceClasses = DICE_SCENES[stateIdx] || null;
 
+  const characterClasses = CHARACTER_SCENES[stateIdx] || null;
+
+
   emitToJoinedAndAdmins("state", { 
     state, 
     index: stateIdx,
     diceClasses,     // <--- added
+    characterClasses,
   });
 
   if (isVotingScene(state)) {
